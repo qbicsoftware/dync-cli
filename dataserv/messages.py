@@ -1,52 +1,34 @@
-def send_upload_approved(socket, connection, credit):
-    socket.send_multipart((
-        connection,
-        b"upload-approved",
-        credit.to_bytes(4, 'little'),
-        CHUNKSIZE.to_bytes(4, 'little'),
-        MAX_CREDIT.to_bytes(4, 'little'),
-    ))
+import collections
+import json
 
-
-def send_upload_finished(socket, connection, upload_id):
-    socket.send_multipart((
-        connection,
-        b"upload-finished",
-        upload_id.encode(),
-    ))
-
-
-def send_tranfer_credit(socket, connection, amount):
-    socket.send_multipart((
-        connection,
-        b"transfer-credit",
-        amount.to_bytes(4, 'little')
-    ))
-
-
-def send_error(socket, connection, code, msg):
-    socket.send_multipart((
-        connection,
-        b"error",
-        code.to_bytes(4, 'little'),
-        msg.decode()
-    ))
-
-
-PostFileMsg = collections.namedtuple(
-    'PostFileMsg',
-    ['command', 'connection', 'origin', 'meta']
-)
-
-PostChunkMsg = collections.namedtuple(
-    'PostChunkMsg',
-    ['command', 'connection', 'origin', 'is_last', 'bytes', 'checksum']
-)
 
 ErrorMsg = collections.namedtuple(
     'ErrorMsg',
-    ['command', 'connection', 'origin', 'code', 'msg']
-)
+    ['command', 'connection', 'origin', 'code', 'msg'])
+
+# Messages send by client
+
+PostFileMsg = collections.namedtuple(
+    'PostFileMsg',
+    ['command', 'connection', 'origin', 'meta'])
+
+PostChunkMsg = collections.namedtuple(
+    'PostChunkMsg',
+    ['command', 'connection', 'origin', 'is_last', 'bytes', 'checksum'])
+
+# Messages send by server
+
+UploadApprovedMsg = collections.namedtuple(
+    'UploadApprovedMsg',
+    ['command', 'credit', 'chunksize', 'max_credit'])
+
+UploadFinishedMsg = collections.namedtuple(
+    'UploadFinishedMsg',
+    ['command', 'upload_id'])
+
+TransferCreditMsg = collections.namedtuple(
+    'TransferCreditMsg',
+    ['command', 'amount'])
 
 
 class InvalidMessageError(Exception):
@@ -55,7 +37,7 @@ class InvalidMessageError(Exception):
         self.origin = origin
 
 
-def recv_msg(socket):
+def recv_msg_server(socket):
     frames = socket.recv_multipart(copy=False)
     assert len(frames) >= 2
     connection = frames[0].bytes
@@ -87,3 +69,71 @@ def recv_msg(socket):
         return ErrorMsg(command, connection, origin, code, msg)
     else:
         raise ValueError("Invalid message command: %s" % command)
+
+
+class ServerConnection:
+    def __init__(self, socket, connection_id):
+        self._socket = socket
+        self._connection_id = connection_id
+
+    def send_upload_approved(self, chunksize, max_credit, credit):
+        self._socket.send_multipart((
+            self._connection_id,
+            b"upload-approved",
+            credit.to_bytes(4, 'little'),
+            chunksize.to_bytes(4, 'little'),
+            max_credit.to_bytes(4, 'little')))
+
+    def send_upload_finished(self, upload_id):
+        self._socket.send_multipart((
+            self._connection_id,
+            b"upload-finished",
+            upload_id.encode()))
+
+    def send_tranfer_credit(self, amount):
+        self._socket.send_multipart((
+            self._connection_id,
+            b"transfer-credit",
+            amount.to_bytes(4, 'little')))
+
+    def send_error(self, code, msg):
+        self._socket.send_multipart((
+            self._connection_id,
+            b"error",
+            code.to_bytes(4, 'little'),
+            msg.encode()))
+
+
+class ClientConnection:
+    def __init__(self, socket):
+        self._socket = socket
+
+    def send_post_chunk(self, data, is_last=False, checksum=None):
+        if is_last:
+            assert checksum is not None
+            flags = 1
+            self._socket.send_multipart((
+                b"post-chunk",
+                flags.to_bytes(4, 'little'),
+                data,
+                checksum))
+        else:
+            assert checksum is None
+            flags = 0
+            self._socket.send_multipart((
+                b"post-chunk",
+                flags.to_bytes(4, 'little'),
+                data))
+
+    def send_error(self, code, msg):
+        self._socket.send_multipart((
+            b"error",
+            code.to_bytes(4, 'little'),
+            msg.encode()))
+
+    def send_post_file(self, name, meta):
+        meta = json.dumps(meta).encode()
+        self._socket.send_multipart((
+            b"post-file",
+            name.encode(),
+            meta))

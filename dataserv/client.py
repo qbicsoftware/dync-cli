@@ -1,13 +1,28 @@
 import json
 import hashlib
+import argparse
 
 import zmq
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Send files and metadata to a remote server")
+    parser.add_argument(
+        "-m", "--meta", type=str, default=None,
+        help="Path to a json file containing metadata.")
+    parser.add_argument(
+        "-n", "--name", help="Overwrite destination file name.")
+    parser.add_argument("server")
+    parser.add_argument("source")
+    return parser.parse_args()
 
 
 class Upload:
     def __init__(self, ctx, address, meta, file):
         self._file = file
         self._socket = ctx.socket(zmq.DEALER)
+        self._socket.set(zmq.LINGER, 100)
         self._socket.connect(address)
         meta = json.dumps(meta).encode()
         self._socket.send_multipart((b"post-file", meta))
@@ -58,13 +73,22 @@ class Upload:
             raise ValueError("Invalid remote message.")
 
 
-def send_file(path, server_addr, meta):
+def send_file(file, server_addr, meta):
     ctx = zmq.Context.instance()
-    with open(path, 'rb') as file:
-        return Upload(ctx, address, meta, file).serve()
+    return Upload(ctx, address, meta, file).serve()
 
 
 if __name__ == '__main__':
+    args = parse_args()
     address = "tcp://127.0.0.1:8889"
-    #address = "ipc:///tmp/dataserv-rpc"
-    print(send_file("/home/adr/data/rnacount/align.bam", address, {}))
+    if args.meta:
+        with open(args.meta) as meta:
+            meta = json.load(meta)
+    else:
+        meta = {}
+
+    if args.source == '-':
+        send_file(sys.stdin.buffer, args.address, meta)
+    else:
+        with open(args.source, 'rb') as source:
+            send_file(source, address, meta)

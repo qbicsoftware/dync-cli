@@ -1,26 +1,20 @@
 import uuid
-import json
-import tempfile
 import collections
-import os
-import hashlib
 import logging
 import sys
 import time
 
 import zmq
 
-from .messages import (
-    send_upload_approved, send_tranfer_credit, send_error,
-    send_upload_finished, InvalidMessageError
-)
-from .messages import recv_msg_server as recv_msg
+from .messages import InvalidMessageError, ServerConnection, recv_msg_server
+from .storage import Storage
 
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 
 CHUNKSIZE = 16 * 1024
+TIMEOUT = 3600
 
 MAX_DEBT = 50
 MIN_DEBT = 30
@@ -28,87 +22,17 @@ MAX_CREDIT = 10
 TRANSFER_THRESHOLD = 3
 
 
-class Storage:
-    def __init__(self, path):
-        log.info("Initialize storage at %s", path)
-        self._path = path
-        self._files = []
-        self._destinations = []
-
-    def add_file(self, meta, origin):
-        destination = self._destination_from_meta(meta)
-        log.info("Prepare new temporary file for destination %s", destination)
-        self._destinations.append(destination)
-        file = ChecksumFile(destination)
-        self._files.append(file)
-        return file
-
-    def _destination_from_meta(self, meta):
-        return "/tmp/dest"
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, etype, evalue, trace):
-        error = None
-        for file in self._files:
-            try:
-                file.cleanup()
-            except Exception as e:
-                if error is not None:
-                    error = e
-        if error is not None:
-            raise e
-
-
-class ChecksumFile:
-    def __init__(self, destination):
-        self._tmpdir = tempfile.mkdtemp()
-        self._tmppath = os.path.join(self._tmpdir, "upload")
-        self._file = open(self._tmppath, 'wb')
-        self._destination = destination
-        self._hasher = hashlib.sha256()
-
-    def write(self, data):
-        self._hasher.update(data)
-        self._file.write(data)
-
-    def cleanup(self):
-        self._file.close()
-        try:
-            os.unlink(self._tmppath)
-        except Exception:
-            pass
-        try:
-            os.rmdir(self._tmpdir)
-        except Exception:
-            pass
-
-    def finalize(self, remote_checksum):
-        self._file.close()
-        ok = remote_checksum == self._hasher.digest()
-        if ok:
-            try:
-                os.rename(self._tmppath, self._destination)
-            except Exception as e:
-                log.error("Failed to move %s to destination: %s. Error: %s",
-                          self._tmppath, self._destination, str(e))
-                raise
-        self.cleanup()
-        return ok, self._hasher.digest()
-
-
 class Upload:
-    def __init__(self, outsocket, connection, file, init_credit):
+    def __init__(self, connection, target_file, origin, init_credit):
         self._id = uuid.uuid4().hex
         log.info("Upload %s: Initialize with credit %s", self._id, init_credit)
-        self._file = file
-        self._socket = outsocket
-        self._connection = connection
+        self.origin = origin
+        self._file = target_file
+        self._conn = connection
         self._credit = init_credit
         self._last_active = time.time()
         self._canceled = False
-        send_upload_approved(self._socket, self._connection, init_credit)
+        self._conn.send_upload_approved(CHUNKSIZE, MAX_CREDIT, init_credit)
 
     def handle_msg(self, msg):
         assert not self._canceled
@@ -125,11 +49,10 @@ class Upload:
             ok, local_checksum = self._file.finalize(msg.checksum)
             if ok:
                 log.info("Upload %s: Upload finished successfully", self._id)
-                send_upload_finished(self._socket, self._connection, self._id)
+                self._conn.send_upload_finished(self._id)
             else:
                 log.warn("Upload %s: Upload failed.", self._id)
-                send_error(self._socket, self._connection,
-                           code=500, msg="Checksum mismatch")
+                self._conn.send_error(code=500, msg="Checksum mismatch")
         else:
             self._file.write(msg.bytes)
             returned_credit = 1
@@ -148,7 +71,7 @@ class Upload:
         self._credit = min(MAX_CREDIT, self._credit + amount)
         transfer = self._credit - old
         log.debug("Upload %s: Transfering credit: %s", self._id, transfer)
-        send_tranfer_credit(self._socket, self._connection, transfer)
+        self._conn.send_tranfer_credit(transfer)
         return transfer
 
     def seconds_since_active(self):
@@ -177,21 +100,23 @@ class Server:
         self._debt += init_credit
 
         file = self._storage.add_file(msg.meta, msg.origin)
+
         try:
-            upload = Upload(self._socket, msg.connection, file, init_credit)
+            conn = ServerConnection(self._socket, msg.connection)
+            upload = Upload(conn, file, msg.origin, init_credit)
         except Exception:
             file.cleanup()
             raise
-        self._uploads[msg.connection] = (msg.origin, upload)
+        self._uploads[msg.connection] = upload
 
     def _dispatch_connection(self, msg):
         try:
-            session_origin, upload = self._uploads[msg.connection]
+            upload = self._uploads[msg.connection]
         except KeyError:
             log.error("Invalid message from %s: no matching connection %s",
                       msg.origin, msg.connection)
             return
-        if session_origin != msg.origin:
+        if upload.origin != msg.origin:
             log.error("Got message from %s with invalid origin %s",
                       msg.origin, session_origin)
             return
@@ -202,7 +127,7 @@ class Server:
 
     def _distribute_credit(self):
         log.debug("Distribute credit. Current debt is %s", self._debt)
-        for (origin, upload) in self._uploads.values():
+        for upload in self._uploads.values():
             if self._debt >= MAX_DEBT:
                 break
 
@@ -220,11 +145,14 @@ class Server:
     def serve(self):
         while True:
             if self._debt < MIN_DEBT:
-                self._distribute_credit()
+                try:
+                    self._distribute_credit()
+                except Exception:
+                    log.exception("Error while distributing credit.")
             if time.time() - self._last_active_check > TIMEOUT:
                 self._check_timeouts()
             try:
-                msg = recv_msg(self._socket)
+                msg = recv_msg_server(self._socket)
             except InvalidMessageError as e:
                 log.warn("Received invalid message from %s: %s",
                          e.origin, str(e))
@@ -236,12 +164,20 @@ class Server:
                 try:
                     self._add_upload(msg)
                 except Exception:
-                    log.exeption("Exception while creating new upload.")
+                    log.exception("Exception while creating new upload.")
+                    try:
+                        self._socket.send_multipart((
+                            msg.connection,
+                            b"error",
+                            (500).to_bytes(4, 'little'),
+                            b"Failed to create new upload"))
+                    except Exception:
+                        log.exception("Could not send error message to client")
             else:
                 try:
                     self._dispatch_connection(msg)
                 except Exception:
-                    log.exeption(
+                    log.exception(
                         "Exception while dispatiching message from %s",
                         msg.origin
                     )
