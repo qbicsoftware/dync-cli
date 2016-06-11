@@ -37,6 +37,22 @@ class Upload:
     def handle_msg(self, msg):
         assert not self._canceled
         self._last_active = time.time()
+        try:
+            if msg.command == b"post-chunk":
+                return self._handle_post_chunk(msg)
+            elif msg.command == b"error":
+                return self._handle_error(msg)
+            elif msg.command == b"ping":
+                return self._handle_ping(msg)
+            else:
+                credit = self.cancel(400, "Unknown command.")
+                return True, credit
+        except Exception:
+            log.exception("Error while handeling message")
+            credit = self.cancel(500, "Unknown error")
+            return True, credit
+
+    def _handle_post_chunk(self, msg):
         assert msg.command == b"post-chunk"
         log.debug("Upload %s: Received chunk with size %s, is_last is %s",
                   self._id, len(msg.bytes), msg.is_last)
@@ -61,6 +77,14 @@ class Upload:
         log.debug("Upload %s: Returning credit: %s", self._id, returned_credit)
         return msg.is_last, returned_credit
 
+    def _handle_error(self, msg):
+        log.warn("Got remote error with code %s and message %s",
+                 msg.code, msg.msg)
+        self.silent_cancel()
+
+    def _handle_ping(self, msg):
+        self._conn.send_pong()
+
     def offer_credit(self, amount):
         log.debug("Upload %s: Offered credit: %s. Current credit is %s",
                   self._id, amount, self._credit)
@@ -77,10 +101,16 @@ class Upload:
     def seconds_since_active(self):
         return self._last_active - time.time()
 
-    def cancel(self):
-        log.info("Upload %s: Canceling upload.", self._id)
+    def _silent_cancel(self):
         self._canceled = True
         self._file.cleanup()
+        return self._credit
+
+    def cancel(self, code, msg):
+        log.info("Upload %s: Canceling upload with code %s and message %s",
+                 self._id, code, msg)
+        self._conn.send_error(code, msg)
+        return self._silent_cancel()
 
 
 class Server:
@@ -97,7 +127,6 @@ class Server:
             raise ValueError("Connection id not unique")
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
-        self._debt += init_credit
 
         file = self._storage.add_file(msg.meta, msg.origin)
 
@@ -107,6 +136,7 @@ class Server:
         except Exception:
             file.cleanup()
             raise
+        self._debt += init_credit
         self._uploads[msg.connection] = upload
 
     def _dispatch_connection(self, msg):
@@ -135,12 +165,15 @@ class Server:
 
     def _check_timeouts(self):
         cancel = []
+        credit = 0
         for connection, upload in self._uploads.items():
             if upload.seconds_since_active() > TIMEOUT:
                 cancel.append(connection)
-                upload.cancel()
+                credit += upload.cancel(408, "Connection timed out.")
         for key in cancel:
             del self._uploads[key]
+
+        self._debt -= credit
 
     def serve(self):
         while True:
@@ -152,6 +185,8 @@ class Server:
             if time.time() - self._last_active_check > TIMEOUT:
                 self._check_timeouts()
             try:
+                log.debug("Waiting for message. Active uploads: %s, debt: %s",
+                          len(self._uploads), self._debt)
                 msg = recv_msg_server(self._socket)
             except InvalidMessageError as e:
                 log.warn("Received invalid message from %s: %s",
@@ -162,6 +197,9 @@ class Server:
                 continue
             if msg.command == b"post-file":
                 try:
+                    log.info("Creating new upload. Current number of "
+                             "uploads: %s, current debt: %s",
+                             len(self._uploads), self._debt)
                     self._add_upload(msg)
                 except Exception:
                     log.exception("Exception while creating new upload.")
@@ -174,13 +212,22 @@ class Server:
                     except Exception:
                         log.exception("Could not send error message to client")
             else:
-                try:
-                    self._dispatch_connection(msg)
-                except Exception:
-                    log.exception(
-                        "Exception while dispatiching message from %s",
-                        msg.origin
-                    )
+                self._dispatch_connection(msg)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, etype, evalue, trace):
+        print(etype)
+        if issubclass(etype, Exception):
+            log.critical("Server shutting down due to error: ", str(evalue))
+        if issubclass(etype, (KeyboardInterrupt, SystemExit)):
+            log.info("Shutting down.")
+        for upload in self._uploads:
+            try:
+                upload.cancel(503, "Server shutdown")
+            except Exception:
+                log.exception("Error while canceling upload")
 
 
 if __name__ == '__main__':
@@ -191,9 +238,8 @@ if __name__ == '__main__':
 
     with Storage(path) as storage:
         log.info("Starting server")
-        server = Server(ctx, storage, address)
         try:
-            server.serve()
-        except Exception:
-            log.critical("Server shut down due to error:", exc_info=True)
-        log.info("Server stopped.")
+            with Server(ctx, storage, address) as server:
+                server.serve()
+        except (KeyboardInterrupt, SystemExit):
+            log.info("Server stopped.")

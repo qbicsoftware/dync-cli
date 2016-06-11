@@ -63,14 +63,18 @@ class ChecksumFile:
             pass
 
     def finalize(self, remote_checksum):
-        self._file.close()
-        ok = remote_checksum == self._hasher.digest()
-        if ok:
-            try:
-                os.rename(self._tmppath, self._destination)
-            except Exception as e:
-                log.error("Failed to move %s to destination: %s. Error: %s",
-                          self._tmppath, self._destination, str(e))
-                raise
-        self.cleanup()
+        try:
+            self._file.close()
+            ok = remote_checksum == self._hasher.digest()
+            if ok:
+                try:
+                    os.rename(self._tmppath, self._destination)
+                except Exception as e:
+                    log.error("Failed to move %s to %s. Error: %s",
+                              self._tmppath, self._destination, str(e))
+                    raise
+                log.info("Target file %s complete",
+                         self._destination)
+        finally:
+            self.cleanup()
         return ok, self._hasher.digest()

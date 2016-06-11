@@ -16,6 +16,10 @@ PostChunkMsg = collections.namedtuple(
     'PostChunkMsg',
     ['command', 'connection', 'origin', 'is_last', 'bytes', 'checksum'])
 
+PingMsg = collections.namedtuple(
+    'PingMsg',
+    ['command', 'connection', 'origin'])
+
 # Messages send by server
 
 UploadApprovedMsg = collections.namedtuple(
@@ -29,6 +33,10 @@ UploadFinishedMsg = collections.namedtuple(
 TransferCreditMsg = collections.namedtuple(
     'TransferCreditMsg',
     ['command', 'amount'])
+
+PongMsg = collections.namedtuple(
+    'PongMsg',
+    ['command'])
 
 
 class InvalidMessageError(Exception):
@@ -67,6 +75,9 @@ def recv_msg_server(socket):
         code = int.from_bytes(frames[2].bytes, 'little')
         msg = frames[3].bytes.decode()
         return ErrorMsg(command, connection, origin, code, msg)
+    elif command == b"ping":
+        assert len(frames) == 3
+        return PingMsg(command, connection, origin)
     else:
         raise ValueError("Invalid message command: %s" % command)
 
@@ -95,6 +106,11 @@ class ServerConnection:
             self._connection_id,
             b"transfer-credit",
             amount.to_bytes(4, 'little')))
+
+    def send_pong(self):
+        self._socket.send_multipart((
+            self._connection_id,
+            b"pong"))
 
     def send_error(self, code, msg):
         self._socket.send_multipart((
@@ -125,15 +141,18 @@ class ClientConnection:
                 flags.to_bytes(4, 'little'),
                 data))
 
-    def send_error(self, code, msg):
-        self._socket.send_multipart((
-            b"error",
-            code.to_bytes(4, 'little'),
-            msg.encode()))
-
     def send_post_file(self, name, meta):
         meta = json.dumps(meta).encode()
         self._socket.send_multipart((
             b"post-file",
             name.encode(),
             meta))
+
+    def send_ping(self):
+        self._socket.send_multipart((b"ping"))
+
+    def send_error(self, code, msg):
+        self._socket.send_multipart((
+            b"error",
+            code.to_bytes(4, 'little'),
+            msg.encode()))
