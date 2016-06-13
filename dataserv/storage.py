@@ -33,7 +33,7 @@ class Storage:
             try:
                 file.cleanup()
             except Exception as e:
-                if error is not None:
+                if error is None:
                     error = e
         if error is not None:
             raise e
@@ -46,10 +46,12 @@ class ChecksumFile:
         self._file = open(self._tmppath, 'wb')
         self._destination = destination
         self._hasher = hashlib.sha256()
+        self.chunks_written = 0
 
     def write(self, data):
         self._hasher.update(data)
         self._file.write(data)
+        self.chunks_written += 1
 
     def cleanup(self):
         self._file.close()

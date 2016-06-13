@@ -1,8 +1,12 @@
 import json
 import hashlib
 import argparse
+import collections
 
 import zmq
+import zmq.auth
+
+from .messages import ClientConnection, recv_msg_client
 
 
 def parse_args():
@@ -18,69 +22,96 @@ def parse_args():
     return parser.parse_args()
 
 
+class UploadFile:
+    def __init__(self, fileobj, maxqueue, chunksize):
+        self._chunksize = chunksize
+        self._hasher = hashlib.sha256()
+        self._chunks_read = 0
+        self.chunk_seek = 0
+        self._chunks = collections.deque(maxlen=maxqueue)
+        self._file = fileobj
+
+    def read(self):
+        if self.chunk_seek == self._chunks_read:
+            data = self._file.read(self._chunksize)
+            self._hasher.update(data)
+            self._chunks.append(data)
+            self._chunks_read += 1
+            self.chunk_seek += 1
+            return data
+        else:
+            nback = self._chunks_read - self.chunk_seek
+            data = self._chunks[-nback]
+            self.chunk_seek += 1
+            return data
+
+    def seek_chunk(self, chunk):
+        self.chunk_seek = chunk
+
+
 class Upload:
-    def __init__(self, ctx, address, meta, file):
+    def __init__(self, ctx, address, meta, file, server_pk, pk, sk):
         self._file = file
         self._socket = ctx.socket(zmq.DEALER)
         self._socket.set(zmq.LINGER, 100)
+        self._socket.curve_secretkey = sk
+        self._socket.curve_publickey = pk
+        self._socket.curve_serverkey = server_pk
         self._socket.connect(address)
-        meta = json.dumps(meta).encode()
-        self._socket.send_multipart((b"post-file", meta))
-        frames = self._socket.recv_multipart()
-        assert frames[0] == b"upload-approved"
-        self._credit = int.from_bytes(frames[1], 'little')
-        self._chunksize = int.from_bytes(frames[2], 'little')
-        self._maxcredit = int.from_bytes(frames[3], 'little')
-        self._hasher = hashlib.sha256()
+        self._conn = ClientConnection(self._socket)
+        self._conn.send_post_file("filename", meta)
+        msg = recv_msg_client(self._socket)
+        if msg.command == b"error":
+            assert False
+        elif msg.command == b"upload-approved":
+            self._credit = msg.credit
+
+        self._file = UploadFile(file, msg.max_credit, msg.chunksize)
+
+    def send_chunks(self):
+        is_last = False
+        while self._credit and not is_last:
+            is_last = self._send_chunk()
+            self._credit -= 1
 
     def serve(self):
-        finished = False
+        self.send_chunks()
 
-        while not finished:
-            self._credit -= 1
-            finished = self._send_chunk()
-            if finished:
-                return self._finalize()
-            if not self._credit:
-                self._wait_for_credit()
+        while True:
+            msg = recv_msg_client(self._socket)
+            if msg.command == b'error':
+                raise RuntimeError(msg.msg)
+            elif msg.command == b'transfer-credit':
+                self._credit += msg.amount
+                self.send_chunks()
+            elif msg.command == b"seek":
+                raise NotImplemented()
+            elif msg.command == b"upload-finished":
+                return msg.upload_id
 
     def _send_chunk(self):
-        data = self._file.read(self._chunksize)
-        self._hasher.update(data)
-        if not data:
-            flags = (1).to_bytes(4, 'little')
-            checksum = self._hasher.digest()
-            self._socket.send_multipart((b"post-chunk", flags, data, checksum))
+        data = self._file.read()
+        nchunk = self._file.chunk_seek - 1
+        is_last = not data
+        if is_last:
+            checksum = self._file._hasher.digest()
         else:
-            flags = (0).to_bytes(4, 'little')
-            self._socket.send_multipart((b"post-chunk", flags, data))
-        return not data
-
-    def _wait_for_credit(self):
-        frames = self._socket.recv_multipart()
-        assert frames[0] == b"transfer-credit"
-        self._credit += int.from_bytes(frames[1], 'little')
-
-    def _finalize(self):
-        frames = self._socket.recv_multipart()
-        while frames[0] == b"transfer-credit":
-            frames = self._socket.recv_multipart()
-        if frames[0] == b"upload-finished":
-            return frames[1].decode()
-        elif frames[1] == b"error":
-            raise RuntimeError("Failed file upload: %s" % frames[3].decode())
-        else:
-            raise ValueError("Invalid remote message.")
+            checksum = None
+        self._conn.send_post_chunk(nchunk, data, is_last, checksum)
+        return is_last
 
 
-def send_file(file, server_addr, meta):
+def send_file(file, server_addr, meta, server_pk, pk, sk):
     ctx = zmq.Context.instance()
-    return Upload(ctx, address, meta, file).serve()
+    return Upload(ctx, server_addr, meta, file, server_pk, pk, sk).serve()
 
 
 if __name__ == '__main__':
     args = parse_args()
-    address = "tcp://127.0.0.1:8889"
+
+    server_pk, _ = zmq.auth.load_certificate("./certificates/server.key")
+    pk, sk = zmq.auth.load_certificate("./certificates/client.key_secret")
+
     if args.meta:
         with open(args.meta) as meta:
             meta = json.load(meta)
@@ -88,7 +119,7 @@ if __name__ == '__main__':
         meta = {}
 
     if args.source == '-':
-        send_file(sys.stdin.buffer, args.address, meta)
+        send_file(sys.stdin.buffer, args.server, meta, server_pk, pk, sk)
     else:
         with open(args.source, 'rb') as source:
-            send_file(source, address, meta)
+            send_file(source, args.server, meta, server_pk, pk, sk)

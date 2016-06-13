@@ -3,8 +3,11 @@ import collections
 import logging
 import sys
 import time
+import os
 
 import zmq
+import zmq.auth
+from zmq.auth.thread import ThreadAuthenticator
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
@@ -13,13 +16,13 @@ log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 
-CHUNKSIZE = 16 * 1024
+CHUNKSIZE = 256 * 1024
 TIMEOUT = 3600
 
-MAX_DEBT = 50
-MIN_DEBT = 30
-MAX_CREDIT = 10
-TRANSFER_THRESHOLD = 3
+MAX_DEBT = 500
+MIN_DEBT = 300
+MAX_CREDIT = 200
+TRANSFER_THRESHOLD = 100
 
 
 class Upload:
@@ -55,7 +58,7 @@ class Upload:
     def _handle_post_chunk(self, msg):
         assert msg.command == b"post-chunk"
         log.debug("Upload %s: Received chunk with size %s, is_last is %s",
-                  self._id, len(msg.bytes), msg.is_last)
+                  self._id, len(msg.data), msg.is_last)
 
         if msg.is_last:
             log.debug("Upload %s: Last chunk received.", self._id)
@@ -70,7 +73,7 @@ class Upload:
                 log.warn("Upload %s: Upload failed.", self._id)
                 self._conn.send_error(code=500, msg="Checksum mismatch")
         else:
-            self._file.write(msg.bytes)
+            self._file.write(msg.data)
             returned_credit = 1
 
         self._credit -= returned_credit
@@ -95,7 +98,7 @@ class Upload:
         self._credit = min(MAX_CREDIT, self._credit + amount)
         transfer = self._credit - old
         log.debug("Upload %s: Transfering credit: %s", self._id, transfer)
-        self._conn.send_tranfer_credit(transfer)
+        self._conn.send_tranfer_credit(transfer, self._file.chunks_written)
         return transfer
 
     def seconds_since_active(self):
@@ -114,8 +117,11 @@ class Upload:
 
 
 class Server:
-    def __init__(self, ctx, storage, address):
+    def __init__(self, ctx, storage, address, server_keys):
         self._socket = ctx.socket(zmq.ROUTER)
+        self._socket.curve_secretkey = server_secret[1]
+        self._socket.curve_publickey = server_public[0]
+        self._socket.curve_server = True
         self._socket.bind(address)
         self._storage = storage
         self._uploads = collections.OrderedDict()
@@ -123,6 +129,7 @@ class Server:
         self._last_active_check = time.time()
 
     def _add_upload(self, msg):
+        log.info("Creating new upload.")
         if msg.connection in self._uploads:
             raise ValueError("Connection id not unique")
 
@@ -154,6 +161,7 @@ class Server:
         self._debt -= returned_credit
         if finished:
             del self._uploads[msg.connection]
+            log.info("Upload finished. %s remaining", len(self._uploads))
 
     def _distribute_credit(self):
         log.debug("Distribute credit. Current debt is %s", self._debt)
@@ -175,42 +183,44 @@ class Server:
 
         self._debt -= credit
 
+    def send_error(connection_id, code=500, msg=""):
+        try:
+            self._socket.send_multipart((
+                msg.connection,
+                b"error",
+                (500).to_bytes(4, 'little'),
+                msg.encode()))
+        except Exception:
+            log.exception("Could not send error message to client")
+
+    def log_status(self):
+        log.info("Current number of uploads: %s, current debt: %s",
+                 len(self._uploads), self._debt)
+
     def serve(self):
         while True:
             if self._debt < MIN_DEBT:
-                try:
-                    self._distribute_credit()
-                except Exception:
-                    log.exception("Error while distributing credit.")
+                self._distribute_credit()
             if time.time() - self._last_active_check > TIMEOUT:
                 self._check_timeouts()
+            log.debug("Waiting for message. Active uploads: %s, debt: %s",
+                      len(self._uploads), self._debt)
             try:
-                log.debug("Waiting for message. Active uploads: %s, debt: %s",
-                          len(self._uploads), self._debt)
                 msg = recv_msg_server(self._socket)
-            except InvalidMessageError as e:
-                log.warn("Received invalid message from %s: %s",
-                         e.origin, str(e))
-                continue
-            except Exception:
-                log.exception("Could not read message.")
+            except (InvalidMessageError, OverflowError) as e:
+                log.warn("Invalid message from %s: %s", e.origin, str(e))
+                if e.connection_id is not None:
+                    self.send_error(e.connection_id, 400, "Invalid message")
                 continue
             if msg.command == b"post-file":
                 try:
-                    log.info("Creating new upload. Current number of "
-                             "uploads: %s, current debt: %s",
-                             len(self._uploads), self._debt)
                     self._add_upload(msg)
                 except Exception:
                     log.exception("Exception while creating new upload.")
-                    try:
-                        self._socket.send_multipart((
-                            msg.connection,
-                            b"error",
-                            (500).to_bytes(4, 'little'),
-                            b"Failed to create new upload"))
-                    except Exception:
-                        log.exception("Could not send error message to client")
+                    self.send_error(
+                        msg.connection, 500, "Failed to create upload")
+                else:
+                    self.log_status()
             else:
                 self._dispatch_connection(msg)
 
@@ -218,20 +228,40 @@ class Server:
         return self
 
     def __exit__(self, etype, evalue, trace):
-        print(etype)
         if issubclass(etype, Exception):
-            log.critical("Server shutting down due to error: ", str(evalue))
+            log.critical("Server shutting down due to error: %s", str(evalue))
         if issubclass(etype, (KeyboardInterrupt, SystemExit)):
             log.info("Shutting down.")
-        for upload in self._uploads:
+        for upload in self._uploads.values():
             try:
                 upload.cancel(503, "Server shutdown")
             except Exception:
                 log.exception("Error while canceling upload")
 
 
-if __name__ == '__main__':
+def prepare_auth(ctx, keydir):
+    certdir = os.path.join(keydir, 'clients')
+    servercert = os.path.join(keydir, 'server.key_secret')
+
+    if not (os.path.exists(keydir) and
+            os.path.exists(certdir) and
+            os.path.exists(servercert)):
+        raise ValueError("Unable to start server: Could not find certificates")
+
+    auth = zmq.auth.ThreadAuthenticator(ctx)
+    auth.configure_curve(domain="*", location=certdir)
+    server_keys = zmq.auth.load_certificate(servercert)
+    return auth, server_keys
+
+
+def main():
     ctx = zmq.Context()
+
+    try:
+        auth, server_keys = prepare_auth()
+    except Exception:
+        log.critical("Failed to load keys", exc_info=True)
+        return 1
 
     path = "/tmp/dataserv"
     address = "tcp://127.0.0.1:8889"
@@ -239,7 +269,12 @@ if __name__ == '__main__':
     with Storage(path) as storage:
         log.info("Starting server")
         try:
-            with Server(ctx, storage, address) as server:
+            with Server(ctx, storage, address, server_keys) as server:
                 server.serve()
-        except (KeyboardInterrupt, SystemExit):
+        finally:
+            auth.stop()
             log.info("Server stopped.")
+
+
+if __name__ == '__main__':
+    main()
