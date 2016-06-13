@@ -2,9 +2,15 @@ import json
 import hashlib
 import argparse
 import collections
+import os
 
 import zmq
 import zmq.auth
+from unittest import mock
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
 
 from .messages import ClientConnection, recv_msg_client
 
@@ -50,13 +56,14 @@ class UploadFile:
 
 
 class Upload:
-    def __init__(self, ctx, address, meta, file, server_pk, pk, sk):
+    def __init__(self, ctx, address, meta, file,
+                 serverkey, pk, sk, filesize=None, progress=False):
         self._file = file
         self._socket = ctx.socket(zmq.DEALER)
         self._socket.set(zmq.LINGER, 100)
         self._socket.curve_secretkey = sk
         self._socket.curve_publickey = pk
-        self._socket.curve_serverkey = server_pk
+        self._socket.curve_serverkey = serverkey
         self._socket.connect(address)
         self._conn = ClientConnection(self._socket)
         self._conn.send_post_file("filename", meta)
@@ -65,6 +72,11 @@ class Upload:
             assert False
         elif msg.command == b"upload-approved":
             self._credit = msg.credit
+
+        if progress and tqdm is not None:
+            self._progress = tqdm(unit='B', total=filesize, unit_scale=True)
+        else:
+            self._progress = mock.MagicMock()
 
         self._file = UploadFile(file, msg.max_credit, msg.chunksize)
 
@@ -87,10 +99,12 @@ class Upload:
             elif msg.command == b"seek":
                 raise NotImplemented()
             elif msg.command == b"upload-finished":
+                self._progress.close()
                 return msg.upload_id
 
     def _send_chunk(self):
         data = self._file.read()
+        self._progress.update(len(data))
         nchunk = self._file.chunk_seek - 1
         is_last = not data
         if is_last:
@@ -101,12 +115,14 @@ class Upload:
         return is_last
 
 
-def send_file(file, server_addr, meta, server_pk, pk, sk):
+def send_file(file, server_addr, meta, server_pk, pk, sk,
+              filesize=None, progress=False):
     ctx = zmq.Context.instance()
-    return Upload(ctx, server_addr, meta, file, server_pk, pk, sk).serve()
+    return Upload(ctx, server_addr, meta, file, server_pk, pk, sk,
+                  filesize=filesize, progress=progress).serve()
 
 
-if __name__ == '__main__':
+def main():
     args = parse_args()
 
     server_pk, _ = zmq.auth.load_certificate("./certificates/server.key")
@@ -121,5 +137,11 @@ if __name__ == '__main__':
     if args.source == '-':
         send_file(sys.stdin.buffer, args.server, meta, server_pk, pk, sk)
     else:
+        filesize = os.stat(args.source).st_size
         with open(args.source, 'rb') as source:
-            send_file(source, args.server, meta, server_pk, pk, sk)
+            send_file(source, args.server, meta,
+                      server_pk, pk, sk, filesize, True)
+
+
+if __name__ == '__main__':
+    main()
