@@ -119,8 +119,8 @@ class Upload:
 class Server:
     def __init__(self, ctx, storage, address, server_keys):
         self._socket = ctx.socket(zmq.ROUTER)
-        self._socket.curve_secretkey = server_secret[1]
-        self._socket.curve_publickey = server_public[0]
+        self._socket.curve_secretkey = server_keys[1]
+        self._socket.curve_publickey = server_keys[0]
         self._socket.curve_server = True
         self._socket.bind(address)
         self._storage = storage
@@ -248,7 +248,8 @@ def prepare_auth(ctx, keydir):
             os.path.exists(servercert)):
         raise ValueError("Unable to start server: Could not find certificates")
 
-    auth = zmq.auth.ThreadAuthenticator(ctx)
+    auth = zmq.auth.thread.ThreadAuthenticator(ctx)
+    auth.start()
     auth.configure_curve(domain="*", location=certdir)
     server_keys = zmq.auth.load_certificate(servercert)
     return auth, server_keys
@@ -258,7 +259,7 @@ def main():
     ctx = zmq.Context()
 
     try:
-        auth, server_keys = prepare_auth()
+        auth, server_keys = prepare_auth(ctx, 'certificates')
     except Exception:
         log.critical("Failed to load keys", exc_info=True)
         return 1
