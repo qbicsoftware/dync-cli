@@ -3,6 +3,7 @@ import hashlib
 import argparse
 import collections
 import os
+import sys
 
 import zmq
 import zmq.auth
@@ -74,7 +75,8 @@ class Upload:
             self._credit = msg.credit
 
         if progress and tqdm is not None:
-            self._progress = tqdm(unit='B', total=filesize, unit_scale=True)
+            self._progress = tqdm(
+                unit='B', total=filesize, unit_scale=True, ascii=True)
         else:
             self._progress = mock.MagicMock()
 
@@ -134,13 +136,16 @@ def main():
     else:
         meta = {}
 
+    progress = sys.stderr.isatty()
+
     if args.source == '-':
-        send_file(sys.stdin.buffer, args.server, meta, server_pk, pk, sk)
+        send_file(sys.stdin.buffer, args.server, meta, server_pk, pk, sk,
+                  filesize=None, progress=progress)
     else:
         filesize = os.stat(args.source).st_size
         with open(args.source, 'rb') as source:
             send_file(source, args.server, meta,
-                      server_pk, pk, sk, filesize, True)
+                      server_pk, pk, sk, filesize, progress)
 
 
 if __name__ == '__main__':
