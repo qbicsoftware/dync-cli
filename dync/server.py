@@ -150,8 +150,8 @@ class Server:
         try:
             upload = self._uploads[msg.connection]
         except KeyError:
-            log.error("Invalid message from %s: no matching connection %s",
-                      msg.origin, msg.connection)
+            log.warn("%s message from %s, but no matching connection %s",
+                     msg.command[:20], msg.origin, bytes(msg.connection))
             return
         if upload.origin != msg.origin:
             log.error("Got message from %s with invalid origin %s",
@@ -275,6 +275,8 @@ def main():
         try:
             with Server(ctx, storage, address, server_keys) as server:
                 server.serve()
+        except KeyboardInterrupt:
+            pass
         finally:
             auth.stop()
             log.info("Server stopped.")
