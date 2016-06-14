@@ -1,5 +1,6 @@
 import collections
 import json
+import zmq
 
 
 ErrorMsg = collections.namedtuple(
@@ -98,7 +99,10 @@ def recv_msg_server(socket):
     if not len(frames) >= 2:
         raise InvalidMessageError("Unexpected number of frames.")
     connection = frames[0].buffer
-    origin = frames[1].get(b'User-Id')
+    try:
+        origin = frames[1].get(b'User-Id')
+    except zmq.ZMQError:
+        origin = None
     command = frames[1].bytes
     if command == b"post-file":
         check_len(frames, 4)
