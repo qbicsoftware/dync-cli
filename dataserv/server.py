@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 
-CHUNKSIZE = 256 * 1024
+CHUNKSIZE = 120 * 1024
 TIMEOUT = 3600
 
 MAX_DEBT = 500
@@ -102,7 +102,7 @@ class Upload:
         return transfer
 
     def seconds_since_active(self):
-        return self._last_active - time.time()
+        return time.time() - self._last_active
 
     def _silent_cancel(self):
         self._canceled = True
@@ -135,7 +135,7 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        file = self._storage.add_file(msg.meta, msg.origin)
+        file = self._storage.add_file(msg.name, msg.meta, msg.origin)
 
         try:
             conn = ServerConnection(self._socket, msg.connection)
@@ -172,6 +172,7 @@ class Server:
             self._debt += upload.offer_credit(MAX_DEBT - self._debt)
 
     def _check_timeouts(self):
+        self._last_active_check = time.time()
         cancel = []
         credit = 0
         for connection, upload in self._uploads.items():
@@ -186,7 +187,7 @@ class Server:
     def send_error(self, connection_id, code=500, msg=""):
         try:
             self._socket.send_multipart((
-                msg.connection,
+                connection_id,
                 b"error",
                 (500).to_bytes(4, 'little'),
                 msg.encode()))
@@ -203,6 +204,7 @@ class Server:
                 self._distribute_credit()
             if time.time() - self._last_active_check > TIMEOUT:
                 self._check_timeouts()
+                self.log_status()
             log.debug("Waiting for message. Active uploads: %s, debt: %s",
                       len(self._uploads), self._debt)
             try:

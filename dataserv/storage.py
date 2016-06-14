@@ -28,9 +28,9 @@ class Storage:
         self._files = {}
         self._destinations = set()
 
-    def add_file(self, meta, user_id):
+    def add_file(self, filename, meta, user_id):
         file_id = uuid.uuid4().hex
-        destination = self._destination_from_meta(meta)
+        destination = self._destination_from_meta(filename, meta)
         assert destination not in self._destinations
         log.info("Prepare new temporary file for destination %s", destination)
         file = ChecksumFile(file_id, destination, self)
@@ -44,8 +44,8 @@ class Storage:
         self._destinations.remove(file._destination)
         del self._files[file_id]
 
-    def _destination_from_meta(self, meta):
-        return "/tmp/dest"
+    def _destination_from_meta(self, filename, meta):
+        return "/tmp/dest" + uuid.uuid4().hex
 
     def __enter__(self):
         return self
