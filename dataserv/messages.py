@@ -97,8 +97,8 @@ def recv_msg_server(socket):
     frames = socket.recv_multipart(copy=False)
     if not len(frames) >= 2:
         raise InvalidMessageError("Unexpected number of frames.")
-    connection = frames[0].bytes
-    origin = None  # TODO
+    connection = frames[0].buffer
+    origin = frames[1].get(b'User-Id')
     command = frames[1].bytes
     if command == b"post-file":
         check_len(frames, 4)
@@ -110,9 +110,9 @@ def recv_msg_server(socket):
         return PostFileMsg(command, connection, origin, name, meta)
     elif command == b"post-chunk":
         check_len(frames, 5, connection)
-        is_last = int.from_bytes(frames[2].bytes, 'little') == 1
-        seek = int.from_bytes(frames[3].bytes, 'little')
-        data = frames[4].bytes
+        is_last = int.from_bytes(frames[2].buffer, 'little') == 1
+        seek = int.from_bytes(frames[3].buffer, 'little')
+        data = frames[4].buffer
         if is_last:
             check_len(frames, 6)
             checksum = frames[5].bytes

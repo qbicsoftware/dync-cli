@@ -6,11 +6,10 @@ import time
 import os
 
 import zmq
-import zmq.auth
-from zmq.auth.thread import ThreadAuthenticator
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
+from .auth import Authenticator, ThreadAuthenticator
 
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -155,7 +154,7 @@ class Server:
             return
         if upload.origin != msg.origin:
             log.error("Got message from %s with invalid origin %s",
-                      msg.origin, session_origin)
+                      msg.origin, upload.origin)
             return
         finished, returned_credit = upload.handle_msg(msg)
         self._debt -= returned_credit
@@ -183,7 +182,7 @@ class Server:
 
         self._debt -= credit
 
-    def send_error(connection_id, code=500, msg=""):
+    def send_error(self, connection_id, code=500, msg=""):
         try:
             self._socket.send_multipart((
                 msg.connection,
@@ -248,9 +247,10 @@ def prepare_auth(ctx, keydir):
             os.path.exists(servercert)):
         raise ValueError("Unable to start server: Could not find certificates")
 
-    auth = zmq.auth.thread.ThreadAuthenticator(ctx)
-    auth.start()
+    auth = Authenticator(ctx)
     auth.configure_curve(domain="*", location=certdir)
+    auth = ThreadAuthenticator(ctx, authenticator=auth)
+    auth.start()
     server_keys = zmq.auth.load_certificate(servercert)
     return auth, server_keys
 
