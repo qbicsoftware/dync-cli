@@ -36,7 +36,7 @@ UploadFinishedMsg = collections.namedtuple(
 
 TransferCreditMsg = collections.namedtuple(
     'TransferCreditMsg',
-    ['command', 'amount', 'ack_chunks'])
+    ['command', 'amount', 'ack_until_byte'])
 
 PongMsg = collections.namedtuple(
     'PongMsg',
@@ -77,8 +77,8 @@ def recv_msg_client(socket):
     elif command == b"transfer-credit":
         check_len(frames, 3)
         amount = int.from_bytes(frames[1].bytes, 'little')
-        ack_chunks = int.from_bytes(frames[2].bytes, 'little')
-        return TransferCreditMsg(command, amount, ack_chunks)
+        ack_until_byte = int.from_bytes(frames[2].bytes, 'little')
+        return TransferCreditMsg(command, amount, ack_until_byte)
     elif command == b"upload-approved":
         check_len(frames, 4)
         credit = int.from_bytes(frames[1].bytes, 'little')
@@ -152,12 +152,12 @@ class ServerConnection:
             b"upload-finished",
             upload_id.encode()))
 
-    def send_tranfer_credit(self, amount, ack_chunks):
+    def send_tranfer_credit(self, amount, ack_until_byte):
         self._socket.send_multipart((
             self._connection_id,
             b"transfer-credit",
             amount.to_bytes(4, 'little'),
-            ack_chunks.to_bytes(8, 'little')))
+            ack_until_byte.to_bytes(8, 'little')))
 
     def send_pong(self):
         self._socket.send_multipart((

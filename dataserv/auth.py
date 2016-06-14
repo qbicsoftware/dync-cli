@@ -1,3 +1,13 @@
+"""zeromq authenticator.
+
+The authenticator in `zmq.auth` does not allow access to
+the origin of individual messages. `zmq` itself will make
+the `user_id` frame of corresponding zap resposes available
+as `Frame.get(b'User-Id')`. This module makes sure we
+acutally return the user id instead of the literal
+'user_id'.
+"""
+
 import logging
 import zmq
 import zmq.auth.thread
@@ -19,6 +29,10 @@ def load_certificate(filename):
     secret_key will be None.
 
     If there is no public key found in the file, ValueError will be raised.
+
+    This is the same as `zmq.util.load_certificate`, but it will also
+    return the user_id of a certificate if this is present in the
+    metadata of the certificate.
     """
     public_key = None
     secret_key = None

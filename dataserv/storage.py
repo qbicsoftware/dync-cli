@@ -8,7 +8,8 @@ being uploaded.
 All storage implementations must have an `add_file` method,
 that takes the metadata provided by the client and the user id
 of the client and returns a file-like object with `write`,
-`abort` and `finalize(remote_checksum)` methods.
+`abort` and `finalize(remote_checksum)` methods and an.
+attribute `nbytes_written`.
 """
 
 import logging
@@ -53,7 +54,7 @@ class Storage:
         error = None
         for file in self._files.values():
             try:
-                file.cleanup()
+                file._cleanup()
             except Exception as e:
                 if error is None:
                     error = e
@@ -76,7 +77,7 @@ class ChecksumFile:
     def write(self, data):
         self._hasher.update(data)
         self._file.write(data)
-        self.chunks_written += 1
+        self.nbytes_written += len(data)
 
     def _cleanup(self):
         self._file.close()

@@ -64,13 +64,14 @@ class Upload:
             returned_credit = self._credit
             log.debug("Upload %s: Remote checksum: %s",
                       self._id, msg.checksum.hex())
-            ok, local_checksum = self._file.finalize(msg.checksum)
-            if ok:
+            try:
+                self._file.finalize(msg.checksum)
+            except Exception as e:
+                log.warn("Upload %s: Upload failed.", self._id)
+                self._conn.send_error(code=500, msg=str(e))
+            else:
                 log.info("Upload %s: Upload finished successfully", self._id)
                 self._conn.send_upload_finished(self._id)
-            else:
-                log.warn("Upload %s: Upload failed.", self._id)
-                self._conn.send_error(code=500, msg="Checksum mismatch")
         else:
             self._file.write(msg.data)
             returned_credit = 1
@@ -97,7 +98,7 @@ class Upload:
         self._credit = min(MAX_CREDIT, self._credit + amount)
         transfer = self._credit - old
         log.debug("Upload %s: Transfering credit: %s", self._id, transfer)
-        self._conn.send_tranfer_credit(transfer, self._file.chunks_written)
+        self._conn.send_tranfer_credit(transfer, self._file.nbytes_written)
         return transfer
 
     def seconds_since_active(self):
@@ -105,7 +106,7 @@ class Upload:
 
     def _silent_cancel(self):
         self._canceled = True
-        self._file.cleanup()
+        self._file.abort()
         return self._credit
 
     def cancel(self, code, msg):
