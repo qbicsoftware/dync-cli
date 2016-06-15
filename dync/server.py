@@ -83,10 +83,12 @@ class Upload:
     def _handle_error(self, msg):
         log.warn("Got remote error with code %s and message %s",
                  msg.code, msg.msg)
-        self.silent_cancel()
+        self._silent_cancel()
+        return True, self._credit
 
     def _handle_ping(self, msg):
         self._conn.send_pong()
+        return False, 0
 
     def offer_credit(self, amount):
         log.debug("Upload %s: Offered credit: %s. Current credit is %s",
@@ -141,7 +143,7 @@ class Server:
             conn = ServerConnection(self._socket, msg.connection)
             upload = Upload(conn, file, msg.origin, init_credit)
         except Exception:
-            file.cleanup()
+            file.abort()
             raise
         self._debt += init_credit
         self._uploads[msg.connection] = upload
@@ -210,7 +212,7 @@ class Server:
             try:
                 msg = recv_msg_server(self._socket)
             except (InvalidMessageError, OverflowError) as e:
-                log.warn("Invalid message from %s: %s", e.origin, str(e))
+                log.debug("Invalid message from %s: %s", e.origin, str(e))
                 if e.connection_id is not None:
                     self.send_error(e.connection_id, 400, "Invalid message")
                 continue
