@@ -75,7 +75,15 @@ dync -m <path-to-meta> <server-hostname> <filename>
 To overwrite key-value pairs in the metadata use the `-k` switch:
 
 ```
-dync -k my_id:ABCDE <server-hostname> <filename>
+dync -k my_id:ABCDE sample:FOO <server-hostname> <filename>
+```
+
+dync does not support directory uploads, but you can use tar to
+bundle the contents into an archive first. In this case you need
+to explicitly set the remote filename with `-n`:
+
+```
+tar -c <dir> | dync -n <filename-on-server.tar> <server>
 ```
 
 for more information see `dync -h`.

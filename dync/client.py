@@ -16,7 +16,7 @@ except ImportError:
 from .messages import ClientConnection, recv_msg_client
 
 
-def parse_args():
+def arg_parser():
     parser = argparse.ArgumentParser(
         description="Send files and metadata to a remote server")
     parser.add_argument(
@@ -24,9 +24,47 @@ def parse_args():
         help="Path to a json file containing metadata.")
     parser.add_argument(
         "-n", "--name", help="Overwrite destination file name.")
+    parser.add_argument("-k", "--key-value", help="Colon seperated key-value "
+                        "pair. Overwrites matedata.", nargs="*")
     parser.add_argument("server")
-    parser.add_argument("source")
-    return parser.parse_args()
+    parser.add_argument("file", default='-', nargs='?')
+    return parser
+
+
+def parse_args():
+    parser = arg_parser()
+    args = parser.parse_args()
+    key_value = {}
+    for keyval in args.key_value:
+        try:
+            key, value = keyval.split(':', 1)
+        except ValueError:
+            parser.error("Invalid key-value pair. Must be seperated by ':'")
+        key_value[key] = value
+
+    if args.meta is not None:
+        try:
+            with open(args.meta) as file:
+                args.meta = json.load(file)
+        except json.JSONDecodeError as e:
+            parser.error("Invalid json in metadata file: " + str(e))
+        except OSError as e:
+            parser.error("Could not open metadata file: " + str(e))
+        if not isinstance(args.meta, collections.Mapping):
+            parser.error("Invalid json metadata. Must contain an object.")
+
+    else:
+        args.meta = {}
+    args.meta.update(key_value)
+
+    if args.name is None:
+        if args.file == '-':
+            raise parser.error(
+                "Filename not known. Set it explicitly with --name")
+        args.name = args.file
+
+    args.server = "tcp://{}:8889".format(args.server)
+    return args
 
 
 class UploadFile:
@@ -89,20 +127,24 @@ class Upload:
             self._credit -= 1
 
     def serve(self):
-        self.send_chunks()
+        try:
+            self.send_chunks()
 
-        while True:
-            msg = recv_msg_client(self._socket)
-            if msg.command == b'error':
-                raise RuntimeError(msg.msg)
-            elif msg.command == b'transfer-credit':
-                self._credit += msg.amount
-                self.send_chunks()
-            elif msg.command == b"seek":
-                raise NotImplemented()
-            elif msg.command == b"upload-finished":
-                self._progress.close()
-                return msg.upload_id
+            while True:
+                msg = recv_msg_client(self._socket)
+                if msg.command == b'error':
+                    raise RuntimeError(msg.msg)
+                elif msg.command == b'transfer-credit':
+                    self._credit += msg.amount
+                    self.send_chunks()
+                elif msg.command == b"seek":
+                    raise NotImplemented()
+                elif msg.command == b"upload-finished":
+                    self._progress.close()
+                    return msg.upload_id
+        except (KeyboardInterrupt, SystemExit):
+            self._conn.send_error(400, "Client shutting down")
+            raise
 
     def _send_chunk(self):
         data = self._file.read()
@@ -127,24 +169,21 @@ def send_file(file, server_addr, meta, server_pk, pk, sk,
 def main():
     args = parse_args()
 
-    server_pk, _ = zmq.auth.load_certificate("./certificates/server.key")
-    pk, sk = zmq.auth.load_certificate("./certificates/client.key_secret")
+    server_key = os.path.expanduser("~/.dync/server.key")
+    client_key = os.path.expanduser("~/.dync/client.key_secret")
 
-    if args.meta:
-        with open(args.meta) as meta:
-            meta = json.load(meta)
-    else:
-        meta = {}
+    server_pk, _ = zmq.auth.load_certificate(server_key)
+    pk, sk = zmq.auth.load_certificate(client_key)
 
     progress = sys.stderr.isatty()
 
-    if args.source == '-':
-        send_file(sys.stdin.buffer, args.server, meta, server_pk, pk, sk,
+    if args.file == '-':
+        send_file(sys.stdin.buffer, args.server, args.meta, server_pk, pk, sk,
                   filesize=None, progress=progress)
     else:
-        filesize = os.stat(args.source).st_size
-        with open(args.source, 'rb') as source:
-            send_file(source, args.server, meta,
+        filesize = os.stat(args.file).st_size
+        with open(args.file, 'rb') as source:
+            send_file(source, args.server, args.meta,
                       server_pk, pk, sk, filesize, progress)
 
 
