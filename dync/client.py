@@ -4,6 +4,8 @@ import argparse
 import collections
 import os
 import sys
+import logging
+import uuid
 
 import zmq
 import zmq.auth
@@ -14,6 +16,14 @@ except ImportError:
     tqdm = None
 
 from .messages import ClientConnection, recv_msg_client
+
+
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+
+
+RETRIES = 5
+RCVTIMEO = 10000
 
 
 def arg_parser():
@@ -71,27 +81,33 @@ class UploadFile:
     def __init__(self, fileobj, maxqueue, chunksize):
         self._chunksize = chunksize
         self._hasher = hashlib.sha256()
-        self._chunks_read = 0
-        self.chunk_seek = 0
+        self._seek_read = 0
+        self._seek = 0
         self._chunks = collections.deque(maxlen=maxqueue)
         self._file = fileobj
 
     def read(self):
-        if self.chunk_seek == self._chunks_read:
+        if self._seek == self._seek_read:
             data = self._file.read(self._chunksize)
             self._hasher.update(data)
-            self._chunks.append(data)
-            self._chunks_read += 1
-            self.chunk_seek += 1
+            self._chunks.append((self._seek, data))
+            self._seek_read += len(data)
+            self._seek += len(data)
             return data
         else:
-            nback = self._chunks_read - self.chunk_seek
-            data = self._chunks[-nback]
-            self.chunk_seek += 1
-            return data
+            for seek, data in self._chunks:
+                if seek == self._seek:
+                    self._seek += len(data)
+                    return data
+            else:
+                raise RuntimeError("Could not find requested chunk.")
 
-    def seek_chunk(self, chunk):
-        self.chunk_seek = chunk
+    def seek(self, new_value=None):
+        if new_value is None:
+            return self._seek
+        else:
+            assert new_value <= self._seek_read
+            self._seek = new_value
 
 
 class Upload:
@@ -103,6 +119,8 @@ class Upload:
         self._socket.curve_secretkey = sk
         self._socket.curve_publickey = pk
         self._socket.curve_serverkey = serverkey
+        self._socket.set(zmq.IDENTITY, uuid.uuid4().bytes)
+        self._socket.set(zmq.RCVTIMEO, RCVTIMEO)
         self._socket.connect(address)
         self._conn = ClientConnection(self._socket)
         self._conn.send_post_file("filename", meta)
@@ -131,31 +149,54 @@ class Upload:
             self.send_chunks()
 
             while True:
-                msg = recv_msg_client(self._socket)
-                if msg.command == b'error':
-                    raise RuntimeError(msg.msg)
-                elif msg.command == b'transfer-credit':
-                    self._credit += msg.amount
-                    self.send_chunks()
-                elif msg.command == b"seek":
-                    raise NotImplemented()
-                elif msg.command == b"upload-finished":
+                finished, upload_id = self._recv_server_status()
+                if finished:
                     self._progress.close()
-                    return msg.upload_id
+                    return upload_id
+                self.send_chunks()
         except (KeyboardInterrupt, SystemExit):
             self._conn.send_error(400, "Client shutting down")
             raise
 
+    def _recv_server_status(self):
+        for _ in range(RETRIES):
+            try:
+                msg = recv_msg_client(self._socket)
+            except zmq.Again:
+                self._conn.send_query_status()
+            else:
+                break
+        else:
+            raise RuntimeError("Connection timed out")
+
+        if msg.command == b'error':
+            raise RuntimeError("Server report error: " + msg.msg)
+        elif msg.command == b'transfer-credit':
+            log.debug("Got credit. Amount %s, old credit was %s",
+                      msg.amount, self._credit)
+            self._credit += msg.amount
+            return False, None
+        elif msg.command == b"status-report":
+            log.debug("Got status report: credit: %s, seek: %s",
+                      msg.credit, msg.seek)
+            self._credit = msg.credit
+            self._file.seek(msg.seek)
+            return False, None
+        elif msg.command == b"upload-finished":
+            return True, msg.upload_id
+        else:
+            raise RuntimeError("Invalid message from server: %s" % msg.command)
+
     def _send_chunk(self):
+        seek = self._file.seek()
         data = self._file.read()
         self._progress.update(len(data))
-        nchunk = self._file.chunk_seek - 1
         is_last = not data
         if is_last:
             checksum = self._file._hasher.digest()
         else:
             checksum = None
-        self._conn.send_post_chunk(nchunk, data, is_last, checksum)
+        self._conn.send_post_chunk(seek, data, is_last, checksum)
         return is_last
 
 

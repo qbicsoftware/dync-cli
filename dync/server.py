@@ -4,6 +4,7 @@ import logging
 import sys
 import time
 import os
+import binascii
 
 import zmq
 
@@ -44,8 +45,8 @@ class Upload:
                 return self._handle_post_chunk(msg)
             elif msg.command == b"error":
                 return self._handle_error(msg)
-            elif msg.command == b"ping":
-                return self._handle_ping(msg)
+            elif msg.command == b"query-status":
+                return self._handle_query_status(msg)
             else:
                 credit = self.cancel(400, "Unknown command.")
                 return True, credit
@@ -58,12 +59,15 @@ class Upload:
         assert msg.command == b"post-chunk"
         log.debug("Upload %s: Received chunk with size %s, is_last is %s",
                   self._id, len(msg.data), msg.is_last)
+        if msg.seek != self._file.nbytes_written:
+            log.debug("Upload %s: Invalid chunk, seek is incorrect", self._id)
+            return False, 0
 
         if msg.is_last:
             log.debug("Upload %s: Last chunk received.", self._id)
             returned_credit = self._credit
             log.debug("Upload %s: Remote checksum: %s",
-                      self._id, msg.checksum.hex())
+                      self._id, binascii.hexlify(msg.checksum).decode())
             try:
                 self._file.finalize(msg.checksum)
             except Exception as e:
@@ -86,8 +90,9 @@ class Upload:
         self._silent_cancel()
         return True, self._credit
 
-    def _handle_ping(self, msg):
-        self._conn.send_pong()
+    def _handle_query_status(self, msg):
+        log.debug("Upload %s: Client is querying status.", self._id)
+        self._conn.send_status_report(self._file.nbytes_written, self._credit)
         return False, 0
 
     def offer_credit(self, amount):
@@ -153,7 +158,9 @@ class Server:
             upload = self._uploads[msg.connection]
         except KeyError:
             log.warn("%s message from %s, but no matching connection %s",
-                     msg.command[:20], msg.origin, bytes(msg.connection))
+                     msg.command[:20], msg.origin,
+                     binascii.hexlify(msg.connection).decode()[:20])
+            self.send_error(msg.connection, 400, "Unknown connection.")
             return
         if upload.origin != msg.origin:
             log.error("Got message from %s with invalid origin %s",

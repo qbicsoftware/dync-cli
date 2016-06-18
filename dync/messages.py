@@ -17,10 +17,6 @@ PostChunkMsg = collections.namedtuple(
     'PostChunkMsg',
     ['command', 'connection', 'origin', 'is_last', 'seek', 'data', 'checksum'])
 
-PingMsg = collections.namedtuple(
-    'PingMsg',
-    ['command', 'connection', 'origin'])
-
 QueryStatusMsg = collections.namedtuple(
     'StatusQueryMsg',
     ['command', 'connection', 'origin'])
@@ -39,13 +35,9 @@ TransferCreditMsg = collections.namedtuple(
     'TransferCreditMsg',
     ['command', 'amount', 'ack_until_byte'])
 
-PongMsg = collections.namedtuple(
-    'PongMsg',
-    ['command'])
-
-StatusMsg = collections.namedtuple(
-    'StatusMsg',
-    ['command', 'last_active', 'nbytes', 'credit'])
+StatusReportMsg = collections.namedtuple(
+    'StatusReportMsg',
+    ['command', 'seek', 'credit'])
 
 
 class InvalidMessageError(Exception):
@@ -72,9 +64,6 @@ def recv_msg_client(socket):
         code = int.from_bytes(frames[1].bytes, 'little')
         msg = frames[2].bytes.decode()
         return ErrorMsg(command, None, None, code, msg)
-    elif command == b"pong":
-        check_len(frames, 1)
-        return PongMsg(command)
     elif command == b"transfer-credit":
         check_len(frames, 3)
         amount = int.from_bytes(frames[1].bytes, 'little')
@@ -90,6 +79,11 @@ def recv_msg_client(socket):
         check_len(frames, 2)
         upload_id = frames[1].bytes.decode()
         return UploadFinishedMsg(command, upload_id)
+    elif command == b"status-report":
+        check_len(frames, 3)
+        seek = int.from_bytes(frames[1].bytes, 'little')
+        credit = int.from_bytes(frames[2].bytes, 'little')
+        return StatusReportMsg(command, seek, credit)
     else:
         raise InvalidMessageError("Unknown command in message")
 
@@ -130,9 +124,9 @@ def recv_msg_server(socket):
         code = int.from_bytes(frames[2].bytes, 'little')
         msg = frames[3].bytes.decode()
         return ErrorMsg(command, connection, origin, code, msg)
-    elif command == b"ping":
+    elif command == b"query-status":
         check_len(frames, 2, connection)
-        return PingMsg(command, connection, origin)
+        return QueryStatusMsg(command, connection, origin)
     else:
         raise ValueError("Invalid message command: %s" % command)
 
@@ -163,10 +157,12 @@ class ServerConnection:
             amount.to_bytes(4, 'little'),
             ack_until_byte.to_bytes(8, 'little')))
 
-    def send_pong(self):
+    def send_status_report(self, seek, credit):
         self._socket.send_multipart((
             self._connection_id,
-            b"pong"))
+            b"status-report",
+            seek.to_bytes(8, 'little'),
+            credit.to_bytes(4, 'little')))
 
     def send_error(self, code, msg):
         self._socket.send_multipart((
@@ -206,8 +202,8 @@ class ClientConnection:
             name.encode(),
             meta))
 
-    def send_ping(self):
-        self._socket.send(b"ping")
+    def send_query_status(self):
+        self._socket.send(b"query-status")
 
     def send_error(self, code, msg):
         self._socket.send_multipart((
