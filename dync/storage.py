@@ -8,7 +8,7 @@ being uploaded.
 All storage implementations must have an `add_file` method,
 that takes the metadata provided by the client and the user id
 of the client and returns a file-like object with `write`,
-`abort` and `finalize(remote_checksum)` methods and an.
+`abort` and `finalize(remote_checksum)` methods and an
 attribute `nbytes_written`.
 """
 
@@ -32,11 +32,16 @@ class Storage:
         file_id = uuid.uuid4().hex
         destination = self._destination_from_meta(filename, meta)
         assert destination not in self._destinations
+        assert not os.path.exists(destination)
         log.info("Prepare new temporary file for destination %s", destination)
-        file = ChecksumFile(file_id, destination, self)
+        file = UploadFile(file_id, destination, self)
         self._files[file_id] = file
         self._destinations.add(destination)
         return file
+
+    @property
+    def num_active(self):
+        return len(self._files)
 
     def _remove_file(self, file):
         file_id = file._file_id
@@ -45,29 +50,24 @@ class Storage:
         del self._files[file_id]
 
     def _destination_from_meta(self, filename, meta):
-        return "/tmp/dest" + uuid.uuid4().hex
+        if filename != os.path.basename(filename) or filename.startswith('.'):
+            raise ValueError("Inivalid filename: %s" % filename[:50])
+        return os.path.join(self._path, filename)
 
     def __enter__(self):
         return self
 
     def __exit__(self, etype, evalue, trace):
-        error = None
-        for file in self._files.values():
-            try:
-                file._cleanup()
-            except Exception as e:
-                if error is None:
-                    error = e
-        if error is not None:
-            raise error
+        for file in list(self._files.values()):
+            file._cleanup()
 
 
-class ChecksumFile:
-    """File-like object that updates a checksum on each write."""
-    def __init__(self, file_id, destination, storage):
+class UploadFile:
+    """File-like object that ."""
+    def __init__(self, file_id, destination, storage, tmp_prefix=None):
         self._file_id = file_id
         self._storage = storage
-        self._tmpdir = tempfile.mkdtemp()
+        self._tmpdir = tempfile.mkdtemp(prefix=tmp_prefix)
         self._tmppath = os.path.join(self._tmpdir, "upload")
         self._file = open(self._tmppath, 'wb')
         self._destination = destination
@@ -75,8 +75,8 @@ class ChecksumFile:
         self.nbytes_written = 0
 
     def write(self, data):
-        self._hasher.update(data)
         self._file.write(data)
+        self._hasher.update(data)
         self.nbytes_written += len(data)
 
     def _cleanup(self):
@@ -85,10 +85,7 @@ class ChecksumFile:
             os.unlink(self._tmppath)
         except Exception:
             pass
-        try:
-            os.rmdir(self._tmpdir)
-        except Exception:
-            pass
+        os.rmdir(self._tmpdir)
         self._storage._remove_file(self)
 
     def abort(self):
