@@ -31,11 +31,6 @@ class TestServerConnection:
         assert msg.code == 500
         assert msg.msg == 'error'
 
-    def test_pong(self):
-        self.conn.send_pong()
-        msg = messages.recv_msg_client(self.pull)
-        assert msg.command == b"pong"
-
     def test_transfer_credit(self):
         self.conn.send_tranfer_credit(amount=15, ack_until_byte=2 ** 50)
         msg = messages.recv_msg_client(self.pull)
@@ -58,6 +53,13 @@ class TestServerConnection:
         msg = messages.recv_msg_client(self.pull)
         assert msg.command == b"upload-finished"
         assert msg.upload_id == "an_id"
+
+    def test_status_report(self):
+        self.conn.send_status_report(2 ** 50, 100)
+        msg = messages.recv_msg_client(self.pull)
+        assert msg.command == b"status-report"
+        assert msg.seek == 2 ** 50
+        assert msg.credit == 100
 
 
 class TestClientConnection:
@@ -86,11 +88,6 @@ class TestClientConnection:
         assert msg.code == 500
         assert msg.msg == 'error'
 
-    def test_ping(self):
-        self.conn.send_ping()
-        msg = messages.recv_msg_server(self.push)
-        assert msg.command == b"ping"
-
     def test_post_chunk(self):
         self.conn.send_post_chunk(seek=0, data=b"data", is_last=False)
         msg = messages.recv_msg_server(self.push)
@@ -111,3 +108,8 @@ class TestClientConnection:
         assert msg.command == b"post-file"
         assert msg.name == "hallo"
         assert msg.meta == {"a": 5}
+
+    def test_query_status(self):
+        self.conn.send_query_status()
+        msg = messages.recv_msg_server(self.push)
+        assert msg.command == b"query-status"
