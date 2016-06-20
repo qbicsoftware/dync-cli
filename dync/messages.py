@@ -128,7 +128,7 @@ def recv_msg_server(socket):
         check_len(frames, 2, connection)
         return QueryStatusMsg(command, connection, origin)
     else:
-        raise ValueError("Invalid message command: %s" % command)
+        raise InvalidMessageError("Invalid message command: %s" % command)
 
 
 class ServerConnection:
