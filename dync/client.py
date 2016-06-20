@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
 
-RETRIES = 5
-RCVTIMEO = 10000
+RETRIES = 120
+RCVTIMEO = 30000
 
 
 def arg_parser():
@@ -34,16 +34,17 @@ def arg_parser():
         help="Path to a json file containing metadata.")
     parser.add_argument(
         "-n", "--name", help="Overwrite destination file name.")
-    parser.add_argument("-k", "--key-value", help="Colon seperated key-value "
-                        "pair. Overwrites matedata.", nargs="*")
+    parser.add_argument("-k", "--key-value", action='append', default=[],
+                        help="Colon seperated key-value pair. "
+                        "Overwrites matedata.")
     parser.add_argument("server")
     parser.add_argument("file", default='-', nargs='?')
     return parser
 
 
-def parse_args():
+def parse_args(args=None):
     parser = arg_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(args=args)
     key_value = {}
     for keyval in args.key_value:
         try:
@@ -163,6 +164,7 @@ class Upload:
             try:
                 msg = recv_msg_client(self._socket)
             except zmq.Again:
+                log.debug("Sending status query")
                 self._conn.send_query_status()
             else:
                 break
