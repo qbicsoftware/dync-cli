@@ -15,13 +15,19 @@ data from labs to our servers. Design goals:
 - `dync` uses curvezmq as implemented in zeromq with pre-shared long
   term keys for transport security to provide confidentiality
   and forward secrecy.
- - Reasonable performance and availability for large files.
+- Reasonable performance and availability for large files.
   The client initiates uploads, but the server
   controls the flow of data. If too many clients try to upload
   files at the same time, the it tells some of the clients
   to wait until there is capacity for the upload. In preliminary
-  tests we reach an upload speed of about 200MB/s under good
-  conditions and probably more like 100MB/s most of the time.
+  tests we reach an upload speed of about 200MB/s
+  on a 10Gbit connection and 120MB/s on a 1Gbit ethernet.
+  The throughput on 10Gbit could probably be improved somewhat.
+- `dync` works on shaky networks. It reconnects if the tcp
+  connection times out and retransmitts messages that were lost
+  between the tcp connections. I can use it to copy files of several GB
+  from my home wireless, which is an achievement most people can
+  not hope to appreciate (https://xkcd.com/1457/).
 
 `dync` is named after Dynein, a motor protein that moves vesicels and
 other cargo in all your cells.
@@ -37,7 +43,19 @@ pip install dync
 
 To get a progress bar on the client you also need to install `tqdm`.
 
-# Client usage
+# Client usag
+# Installation
+
+You can use pip to install both the client and the server
+(TODO, not uploaded yet):
+
+```
+pip install dync
+```
+
+To get a progress bar on the client you also need to install `tqdm`.
+
+# Client usagee
 
 Each client has to create certificates and send them to the server
 before uploading files. You can use this command
