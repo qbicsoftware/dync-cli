@@ -72,13 +72,14 @@ def parse_args(args=None):
         if args.file == '-':
             raise parser.error(
                 "Filename not known. Set it explicitly with --name")
-        args.name = args.file
+        args.name = os.path.basename(args.file)
 
     args.server = "tcp://{}:8889".format(args.server)
     return args
 
 
 class UploadFile:
+    """Read a file in chunks and keep most recent chunks in memory."""
     def __init__(self, fileobj, maxqueue, chunksize):
         self._chunksize = chunksize
         self._hasher = hashlib.sha256()
@@ -108,11 +109,12 @@ class UploadFile:
             return self._seek
         else:
             assert new_value <= self._seek_read
+            assert new_value >= self._chunks[0][0]
             self._seek = new_value
 
 
 class Upload:
-    def __init__(self, ctx, address, meta, file,
+    def __init__(self, ctx, address, meta, file, filename,
                  serverkey, pk, sk, filesize=None, progress=False):
         self._file = file
         self._socket = ctx.socket(zmq.DEALER)
@@ -124,10 +126,10 @@ class Upload:
         self._socket.set(zmq.RCVTIMEO, RCVTIMEO)
         self._socket.connect(address)
         self._conn = ClientConnection(self._socket)
-        self._conn.send_post_file("filename", meta)
+        self._conn.send_post_file(filename, meta)
         msg = recv_msg_client(self._socket)
         if msg.command == b"error":
-            assert False
+            raise RuntimeError("Server refused upload: %s" % msg.msg)
         elif msg.command == b"upload-approved":
             self._credit = msg.credit
 
@@ -203,9 +205,9 @@ class Upload:
 
 
 def send_file(file, server_addr, meta, server_pk, pk, sk,
-              filesize=None, progress=False):
+              filename, filesize=None, progress=False):
     ctx = zmq.Context.instance()
-    return Upload(ctx, server_addr, meta, file, server_pk, pk, sk,
+    return Upload(ctx, server_addr, meta, file, filename, server_pk, pk, sk,
                   filesize=filesize, progress=progress).serve()
 
 
@@ -222,12 +224,12 @@ def main():
 
     if args.file == '-':
         send_file(sys.stdin.buffer, args.server, args.meta, server_pk, pk, sk,
-                  filesize=None, progress=progress)
+                  args.name, filesize=None, progress=progress)
     else:
         filesize = os.stat(args.file).st_size
         with open(args.file, 'rb') as source:
             send_file(source, args.server, args.meta,
-                      server_pk, pk, sk, filesize, progress)
+                      server_pk, pk, sk, args.name, filesize, progress)
 
 
 if __name__ == '__main__':
