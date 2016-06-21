@@ -35,7 +35,10 @@ class TestStorage:
         file = self.storage.add_file("a", {}, "b")
         remote_hash = hashlib.sha256()
         file.finalize(remote_hash.digest())
-        file = self.storage.add_file("a", {}, "b")
+        with assert_raises(Exception):
+            self.storage.add_file("a", {}, "b")
+        os.unlink(os.path.join(self.path, "a"))
+        self.storage.add_file("a", {}, "b")
 
     def test_abort(self):
         file = self.storage.add_file("a", {}, "b")

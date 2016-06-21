@@ -48,8 +48,8 @@ class Upload:
             elif msg.command == b"query-status":
                 return self._handle_query_status(msg)
             else:
-                credit = self.cancel(400, "Unknown command.")
-                return True, credit
+                log.error("Ignoring unexpected message in Upload.")
+                return True, 0
         except Exception:
             log.exception("Error while handeling message")
             credit = self.cancel(500, "Unknown error")
@@ -105,7 +105,7 @@ class Upload:
         self._credit = min(MAX_CREDIT, self._credit + amount)
         transfer = self._credit - old
         log.debug("Upload %s: Transfering credit: %s", self._id, transfer)
-        self._conn.send_tranfer_credit(transfer, self._file.nbytes_written)
+        self._conn.send_tranfer_credit(transfer)
         return transfer
 
     def seconds_since_active(self):
@@ -129,6 +129,7 @@ class Server:
         self._socket.curve_secretkey = server_keys[1]
         self._socket.curve_publickey = server_keys[0]
         self._socket.curve_server = True
+        self._socket.set(zmq.ROUTER_HANDOVER, 1)
         self._socket.bind(address)
         self._storage = storage
         self._uploads = collections.OrderedDict()
@@ -198,8 +199,8 @@ class Server:
             self._socket.send_multipart((
                 connection_id,
                 b"error",
-                (500).to_bytes(4, 'little'),
-                msg.encode()))
+                (500).to_bytes(4, 'big'),
+                msg.encode('utf8')))
         except Exception:
             log.exception("Could not send error message to client")
 

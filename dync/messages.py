@@ -11,7 +11,7 @@ ErrorMsg = collections.namedtuple(
 
 PostFileMsg = collections.namedtuple(
     'PostFileMsg',
-    ['command', 'connection', 'origin', 'name', 'meta'])
+    ['command', 'connection', 'origin', 'flags', 'name', 'meta'])
 
 PostChunkMsg = collections.namedtuple(
     'PostChunkMsg',
@@ -33,7 +33,7 @@ UploadFinishedMsg = collections.namedtuple(
 
 TransferCreditMsg = collections.namedtuple(
     'TransferCreditMsg',
-    ['command', 'amount', 'ack_until_byte'])
+    ['command', 'amount'])
 
 StatusReportMsg = collections.namedtuple(
     'StatusReportMsg',
@@ -61,28 +61,27 @@ def recv_msg_client(socket):
     command = frames[0].bytes
     if command == b'error':
         check_len(frames, 3)
-        code = int.from_bytes(frames[1].bytes, 'little')
-        msg = frames[2].bytes.decode()
+        code = int.from_bytes(frames[1].bytes, 'big')
+        msg = frames[2].bytes.decode('utf8')
         return ErrorMsg(command, None, None, code, msg)
     elif command == b"transfer-credit":
-        check_len(frames, 3)
-        amount = int.from_bytes(frames[1].bytes, 'little')
-        ack_until_byte = int.from_bytes(frames[2].bytes, 'little')
-        return TransferCreditMsg(command, amount, ack_until_byte)
+        check_len(frames, 2)
+        amount = int.from_bytes(frames[1].bytes, 'big')
+        return TransferCreditMsg(command, amount)
     elif command == b"upload-approved":
         check_len(frames, 4)
-        credit = int.from_bytes(frames[1].bytes, 'little')
-        chunksize = int.from_bytes(frames[2].bytes, 'little')
-        max_credit = int.from_bytes(frames[3].bytes, 'little')
+        credit = int.from_bytes(frames[1].bytes, 'big')
+        chunksize = int.from_bytes(frames[2].bytes, 'big')
+        max_credit = int.from_bytes(frames[3].bytes, 'big')
         return UploadApprovedMsg(command, credit, chunksize, max_credit)
     elif command == b"upload-finished":
         check_len(frames, 2)
-        upload_id = frames[1].bytes.decode()
+        upload_id = frames[1].bytes.decode('utf8')
         return UploadFinishedMsg(command, upload_id)
     elif command == b"status-report":
         check_len(frames, 3)
-        seek = int.from_bytes(frames[1].bytes, 'little')
-        credit = int.from_bytes(frames[2].bytes, 'little')
+        seek = int.from_bytes(frames[1].bytes, 'big')
+        credit = int.from_bytes(frames[2].bytes, 'big')
         return StatusReportMsg(command, seek, credit)
     else:
         raise InvalidMessageError("Unknown command in message")
@@ -97,19 +96,23 @@ def recv_msg_server(socket):
         origin = frames[1].get(b'User-Id')
     except zmq.ZMQError:
         origin = None
+    if origin is not None:
+        if not all(frame.get(b"User-Id") == origin for frame in frames):
+            raise InvalidMessageError("Invalid message origin")
     command = frames[1].bytes
     if command == b"post-file":
-        check_len(frames, 4)
-        name = frames[2].bytes.decode()
+        check_len(frames, 5)
+        flags = int.from_bytes(frames[2].bytes, 'big')
+        name = frames[3].bytes.decode('utf8')
         try:
-            meta = json.loads(frames[3].bytes.decode())
+            meta = json.loads(frames[4].bytes.decode('utf8'))
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise InvalidMessageError("Invalid post message", connection)
-        return PostFileMsg(command, connection, origin, name, meta)
+        return PostFileMsg(command, connection, origin, flags, name, meta)
     elif command == b"post-chunk":
         check_len(frames, 5, connection)
-        is_last = int.from_bytes(frames[2].buffer, 'little') == 1
-        seek = int.from_bytes(frames[3].buffer, 'little')
+        is_last = int.from_bytes(frames[2].buffer, 'big') == 1
+        seek = int.from_bytes(frames[3].buffer, 'big')
         data = frames[4].buffer
         if is_last:
             check_len(frames, 6)
@@ -121,8 +124,8 @@ def recv_msg_server(socket):
                             is_last, seek, data, checksum)
     elif command == b"error":
         check_len(frames, 4, connection)
-        code = int.from_bytes(frames[2].bytes, 'little')
-        msg = frames[3].bytes.decode()
+        code = int.from_bytes(frames[2].bytes, 'big')
+        msg = frames[3].bytes.decode('utf8')
         return ErrorMsg(command, connection, origin, code, msg)
     elif command == b"query-status":
         check_len(frames, 2, connection)
@@ -140,36 +143,35 @@ class ServerConnection:
         self._socket.send_multipart((
             self._connection_id,
             b"upload-approved",
-            credit.to_bytes(4, 'little'),
-            chunksize.to_bytes(4, 'little'),
-            max_credit.to_bytes(4, 'little')))
+            credit.to_bytes(4, 'big'),
+            chunksize.to_bytes(4, 'big'),
+            max_credit.to_bytes(4, 'big')))
 
     def send_upload_finished(self, upload_id):
         self._socket.send_multipart((
             self._connection_id,
             b"upload-finished",
-            upload_id.encode()))
+            upload_id.encode('utf8')))
 
-    def send_tranfer_credit(self, amount, ack_until_byte):
+    def send_tranfer_credit(self, amount):
         self._socket.send_multipart((
             self._connection_id,
             b"transfer-credit",
-            amount.to_bytes(4, 'little'),
-            ack_until_byte.to_bytes(8, 'little')))
+            amount.to_bytes(4, 'big')))
 
     def send_status_report(self, seek, credit):
         self._socket.send_multipart((
             self._connection_id,
             b"status-report",
-            seek.to_bytes(8, 'little'),
-            credit.to_bytes(4, 'little')))
+            seek.to_bytes(8, 'big'),
+            credit.to_bytes(4, 'big')))
 
     def send_error(self, code, msg):
         self._socket.send_multipart((
             self._connection_id,
             b"error",
-            code.to_bytes(4, 'little'),
-            msg.encode()))
+            code.to_bytes(4, 'big'),
+            msg.encode('utf8')))
 
 
 class ClientConnection:
@@ -182,8 +184,8 @@ class ClientConnection:
             flags = 1
             self._socket.send_multipart((
                 b"post-chunk",
-                flags.to_bytes(4, 'little'),
-                seek.to_bytes(8, 'little'),
+                flags.to_bytes(4, 'big'),
+                seek.to_bytes(8, 'big'),
                 data,
                 checksum))
         else:
@@ -191,15 +193,16 @@ class ClientConnection:
             flags = 0
             self._socket.send_multipart((
                 b"post-chunk",
-                flags.to_bytes(4, 'little'),
-                seek.to_bytes(8, 'little'),
+                flags.to_bytes(4, 'big'),
+                seek.to_bytes(8, 'big'),
                 data))
 
     def send_post_file(self, name, meta):
-        meta = json.dumps(meta).encode()
+        meta = json.dumps(meta).encode('utf8')
         self._socket.send_multipart((
             b"post-file",
-            name.encode(),
+            (0).to_bytes(4, 'big'),
+            name.encode('utf8'),
             meta))
 
     def send_query_status(self):
@@ -208,5 +211,5 @@ class ClientConnection:
     def send_error(self, code, msg):
         self._socket.send_multipart((
             b"error",
-            code.to_bytes(4, 'little'),
-            msg.encode()))
+            code.to_bytes(4, 'big'),
+            msg.encode('utf8')))

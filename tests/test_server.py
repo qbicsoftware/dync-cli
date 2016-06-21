@@ -103,16 +103,15 @@ class TestUpload:
         assert self.file.nbytes_written == 5
 
     def test_invalid_message(self):
-        self.upload.handle_msg(messages.PostFileMsg(1, 2, 3, 4, 5))
+        self.upload.handle_msg(messages.PostFileMsg(1, 2, 3, 4, 5, 6))
 
     def test_disk_full(self):
         self.client.send_post_chunk(0, b"h", False)
         msg = messages.recv_msg_server(self.ssock)
         with mock.patch('dync.storage.UploadFile.write', side_effect=OSError):
             fin, _ = self.upload.handle_msg(msg)
-            assert fin
+        assert fin
         reply = self.csock.recv_multipart(zmq.NOBLOCK)
-        print(reply)
         assert reply[0] == b"error"
         assert not len(self.storage._destinations)
 

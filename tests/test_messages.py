@@ -32,13 +32,12 @@ class TestServerConnection:
         assert msg.msg == 'error'
 
     def test_transfer_credit(self):
-        self.conn.send_tranfer_credit(amount=15, ack_until_byte=2 ** 50)
+        self.conn.send_tranfer_credit(amount=15)
         msg = messages.recv_msg_client(self.pull)
         assert msg.command == b"transfer-credit"
         assert msg.amount == 15
-        assert msg.ack_until_byte == 2 ** 50
         with assert_raises(OverflowError):
-            self.conn.send_tranfer_credit(2 ** 50, 1)
+            self.conn.send_tranfer_credit(2 ** 50)
 
     def test_upload_approved(self):
         self.conn.send_upload_approved(credit=10, max_credit=20, chunksize=50)

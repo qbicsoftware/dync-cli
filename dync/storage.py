@@ -67,7 +67,7 @@ class UploadFile:
     def __init__(self, file_id, destination, storage, tmp_prefix=None):
         self._file_id = file_id
         self._storage = storage
-        self._tmpdir = tempfile.mkdtemp(prefix=tmp_prefix)
+        self._tmpdir = tempfile.mkdtemp(dir=tmp_prefix)
         self._tmppath = os.path.join(self._tmpdir, "upload")
         self._file = open(self._tmppath, 'wb')
         self._destination = destination
