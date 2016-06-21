@@ -4,7 +4,7 @@
 
 `dync` and `dync-server` are programs that transfer files and metadata
 to a central server. It was written at QBiC to send raw scientific
-data from labs to our servers. Design goals:
+data from labs to our servers.
 
 - No data without metadata: The server rejects file uploads that
   do not contain necessary information.
@@ -24,13 +24,13 @@ data from labs to our servers. Design goals:
   on a 10Gbit connection and 120MB/s on a 1Gbit ethernet.
   The throughput on 10Gbit could probably be improved somewhat.
 - `dync` works on shaky networks. It reconnects if the tcp
-  connection times out and retransmitts messages that were lost
+  connection times out and retransmits messages that were lost
   between the tcp connections. I can use it to copy files of several GB
   from my home wireless, which is an achievement most people can
   not hope to appreciate (https://xkcd.com/1457/).
 
-`dync` is named after Dynein, a motor protein that moves vesicels and
-other cargo in all your cells.
+`dync` is named after Dynein, a motor protein that moves vesicles and
+other cargo in cells.
 
 # Installation
 
@@ -41,21 +41,14 @@ You can use pip to install both the client and the server
 pip install dync
 ```
 
-To get a progress bar on the client you also need to install `tqdm`.
-
-# Client usag
-# Installation
-
-You can use pip to install both the client and the server
-(TODO, not uploaded yet):
-
+or for the development version
 ```
-pip install dync
+pip install git+https://github.com/aseyboldt/dync
 ```
 
 To get a progress bar on the client you also need to install `tqdm`.
 
-# Client usagee
+# Client usage
 
 Each client has to create certificates and send them to the server
 before uploading files. You can use this command
@@ -93,7 +86,7 @@ dync -m <path-to-meta> <server-hostname> <filename>
 To overwrite key-value pairs in the metadata use the `-k` switch:
 
 ```
-dync -k my_id:ABCDE sample:FOO <server-hostname> <filename>
+dync -k my_id:ABCDE -k sample:FOO <server-hostname> <filename>
 ```
 
 dync does not support directory uploads, but you can use tar to
@@ -115,3 +108,52 @@ for more information see `dync -h`.
 # Related software
 
 # Performance
+
+# Protocol
+
+`dync` uses zeromq to send messages between server and client. The server
+binds a ROUTER socket to port 8889 (TODO, which port should we use?),
+the client connects with a DEALER socket. The client socket identity must
+be unique for each upload, eg an uuit4. Both set the zmq security
+mechanism to `CURVE` and provide appropriate keys.
+
+All messages are encoded as multipart messages, where the first frame is
+a command and the other frames are arguments. All integers use little
+endian encoding. Strings (filenames and json data) are encoded in utf8.
+Error messages provide an error code and an error message. The error
+codes should follow the html error codes where possible.
+
+#### Client messages:
+
+```
+post-file: <flags: u32> <filename: utf8> <meta: utf8 json>
+post-chunk: <flags: u32> <seek: u64> <data: bytes> [<checksum: bytes>]
+query-status:
+error: <code: u32> <msg: utf8>
+```
+
+#### Server messages:
+
+```
+upload-approved: <credit: u32> <chunksize: u32> <maxqueue: u32>
+transfer-credit: <amount: u32>
+status-report: <seek: u64> <credit: u32>
+upload-finished: <upload_id: utf8>
+error: <code: u32> <msg: utf8>
+```
+
+The client initiates an upload by sending a `post-file` message. The
+flags field is not used at the moment and should be set to 0. It also
+provides a utf8 encoded filename and a json object as metadata. The
+server can reject the upload with an `error` message (if the client
+did not provide reasonable metadata) or approve it by sending an
+`upload-approved` message. This message also tells the client how may
+chunks it may send to the server (the credit), how large the chunks
+should be at most (chunksize) and how many chunks the client should
+keep in memory after sending them in case the connection is lost and
+chunks need to be sent again.
+
+The client can now send chunks to the server until it either runs
+out of credit or reaches the last chunk. The last chunk is signalled
+by setting the least significant bit in the flags of the `post-chunk`
+message. It must also include a checksum of the whole file.
