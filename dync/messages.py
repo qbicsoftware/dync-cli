@@ -97,7 +97,7 @@ def recv_msg_server(socket):
     except zmq.ZMQError:
         origin = None
     if origin is not None:
-        if not all(frame.get(b"User-Id") == origin for frame in frames):
+        if not all(frame.get(b"User-Id") == origin for frame in frames[2:]):
             raise InvalidMessageError("Invalid message origin")
     command = frames[1].bytes
     if command == b"post-file":
