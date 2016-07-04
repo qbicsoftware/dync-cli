@@ -7,7 +7,7 @@ from dync import messages
 
 class TestServerConnection:
     def setUp(self):
-        self.ctx = zmq.Context.instance()
+        self.ctx = zmq.Context()
         self.conn_id = b'aaa'
         self.pull = self.ctx.socket(zmq.DEALER)
         self.push = self.ctx.socket(zmq.ROUTER)
@@ -63,7 +63,7 @@ class TestServerConnection:
 
 class TestClientConnection:
     def setUp(self):
-        self.ctx = zmq.Context.instance()
+        self.ctx = zmq.Context()
         self.conn_id = b'aaa'
         self.pull = self.ctx.socket(zmq.DEALER)
         self.push = self.ctx.socket(zmq.ROUTER)
