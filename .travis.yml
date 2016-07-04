@@ -1,4 +1,7 @@
-lamguage: python
+language: python
+sudo: false
+env:
+   - ZMQ=bundled
 python:
     - "2.7"
     - "3.4"
