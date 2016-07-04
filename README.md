@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/aseyboldt/dync.svg?branch=master)](https://travis-ci.org/aseyboldt/dync)
+
 # dync
 
 *This is work in progress!*
