@@ -6,3 +6,6 @@ build
 env
 dync.egg-info
 certificates
+cover
+.coverage
+htmlcov
