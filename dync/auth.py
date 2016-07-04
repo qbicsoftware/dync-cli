@@ -106,13 +106,15 @@ class Authenticator:
 
         user_id = self.clients.get(client_key, None)
         if user_id is None:
+            log.info("Incoming connection from unknown user %s" % client_key)
             self._send_zap_reply(request_id, b"400", b"Invalid credentials")
         else:
+            log.info("Incoming connection from %s" % user_id)
             self._send_zap_reply(request_id, b"200", b"OK", user_id)
 
     def _send_zap_reply(self, request_id, status_code, status_text, user_id=''):
         """Send a ZAP reply to finish the authentication."""
-        user_id = user_id if status_code == b'200' else b''
+        user_id = user_id if status_code == b'200' else ''
         user_id = user_id.encode()
         metadata = b''  # not currently used
         log.debug("ZAP reply code=%s text=%s", status_code, status_text)
