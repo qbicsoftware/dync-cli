@@ -158,9 +158,9 @@ class Server:
         try:
             upload = self._uploads[msg.connection]
         except KeyError:
-            log.warn("%s message from %s, but no matching connection %s",
-                     msg.command[:20], msg.origin,
-                     binascii.hexlify(msg.connection).decode()[:20])
+            log.debug("%s message from %s, but no matching connection %s",
+                      msg.command[:20], msg.origin,
+                      binascii.hexlify(msg.connection).decode()[:20])
             self.send_error(msg.connection, 400, "Unknown connection.")
             return
         if upload.origin != msg.origin:
@@ -272,13 +272,13 @@ def main():
     ctx = zmq.Context()
 
     try:
-        auth, server_keys = prepare_auth(ctx, 'certificates')
+        auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
     except Exception:
         log.critical("Failed to load keys", exc_info=True)
         return 1
 
     path = "/tmp/dataserv"
-    address = "tcp://127.0.0.1:8889"
+    address = "tcp://*:8889"
 
     with Storage(path) as storage:
         log.info("Starting server")
