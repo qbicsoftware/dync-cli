@@ -37,6 +37,8 @@ def arg_parser():
     parser.add_argument("-k", "--key-value", action='append', default=[],
                         help="Colon seperated key-value pair. "
                         "Overwrites matedata.")
+    parser.add_argument('-p', '--port', default=8889, type=int,
+                        help="Remote port to connect to.")
     parser.add_argument("server")
     parser.add_argument("file", default='-', nargs='?')
     return parser
@@ -74,7 +76,7 @@ def parse_args(args=None):
                 "Filename not known. Set it explicitly with --name")
         args.name = os.path.basename(args.file)
 
-    args.server = "tcp://{}:8889".format(args.server)
+    args.server = "tcp://{}:{}".format(args.server, args.port)
     return args
 
 
@@ -206,7 +208,7 @@ class Upload:
 
 def send_file(file, server_addr, meta, server_pk, pk, sk,
               filename, filesize=None, progress=False):
-    ctx = zmq.Context.instance()
+    ctx = zmq.Context()
     return Upload(ctx, server_addr, meta, file, filename, server_pk, pk, sk,
                   filesize=filesize, progress=progress).serve()
 
