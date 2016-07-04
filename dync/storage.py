@@ -24,6 +24,8 @@ log = logging.getLogger(__name__)
 class Storage:
     def __init__(self, path):
         log.info("Initialize storage at %s", path)
+        if not os.path.isdir(path):
+            raise ValueError("Invalid storage destination: %s" % path)
         self._path = path
         self._files = {}
         self._destinations = set()

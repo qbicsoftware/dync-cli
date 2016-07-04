@@ -7,8 +7,8 @@ from dync import storage
 
 
 def test_cleanup():
-    store = storage.Storage('/foo')
-    with store as store:
+    store = storage.Storage('/tmp')
+    with store:
         store.add_file('bar', {}, 'itsme')
         assert store.num_active == 1
     assert store.num_active == 0
