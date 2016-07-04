@@ -15,17 +15,18 @@ data from labs to our servers.
 - `dync` uses curvezmq as implemented in zeromq with pre-shared long
   term keys for transport security to provide confidentiality
   and forward secrecy.
-- Reasonable performance and availability for large files.
-  The client initiates uploads, but the server
+- Reasonable performance and availability for large files (tested up
+  to 1TB). The client initiates uploads, but the server
   controls the flow of data. If too many clients try to upload
-  files at the same time, the it tells some of the clients
+  files at the same time, it tells some of the clients
   to wait until there is capacity for the upload. In preliminary
   tests we reach an upload speed of about 200MB/s
   on a 10Gbit connection and 120MB/s on a 1Gbit ethernet.
   The throughput on 10Gbit could probably be improved somewhat.
 - `dync` works on shaky networks. It reconnects if the tcp
   connection times out and retransmits messages that were lost
-  between the tcp connections. I can use it to copy files of several GB
+  between the tcp connections or because of errors that slipped through
+  the error detection of tcp. I can use it to copy files of several GB
   from my home wireless, which is an achievement most people can
   not hope to appreciate (https://xkcd.com/1457/).
 
@@ -152,6 +153,12 @@ chunks it may send to the server (the credit), how large the chunks
 should be at most (chunksize) and how many chunks the client should
 keep in memory after sending them in case the connection is lost and
 chunks need to be sent again.
+
+#### Client behaviour
+
+After sending a `post-file` and receiving a `upload-approved` message
+the client adds chunks to the send queue until it runs of of credit
+or reaches the last chunk.
 
 The client can now send chunks to the server until it either runs
 out of credit or reaches the last chunk. The last chunk is signalled
