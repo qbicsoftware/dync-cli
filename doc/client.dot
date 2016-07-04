@@ -1,0 +1,31 @@
+digraph finite_state_machine {
+	rankdir=LR;
+	ranksep=0.5;
+	//start = 7;
+	start = 1;
+	ratio = 0.4;
+	edge [len = 1.5];
+	node [shape = box];
+		send [label="send chunks"]
+		set [label="set credit/seek"]
+		status [label="send query-status"]
+		error [label="send error"];
+    node [shape = doubleoctagon]
+		wait [label="wait"]
+		success
+		failed;
+    node [shape = none, label=""] start;
+
+    start -> send;
+    send -> error [label = "error"];
+	error -> failed;
+	send -> wait;
+    set -> send;
+	set -> error;
+    status -> wait;
+	wait -> failed [label = "recv error "]
+    wait -> set[label = "transfer"];
+    wait -> status [label = "    timeout"];
+	wait -> success [label = "finished"];
+	wait -> error [label = "shutdown"];
+}

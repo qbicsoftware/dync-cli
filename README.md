@@ -166,3 +166,9 @@ The client can now send chunks to the server until it either runs
 out of credit or reaches the last chunk. The last chunk is signalled
 by setting the least significant bit in the flags of the `post-chunk`
 message. It must also include a checksum of the whole file.
+
+![Client state machine](/doc/client.png?raw=true "Client state machine")
+
+#### Server behaviour
+
+![Server state machine](/doc/server.png?raw=true "Server state machine")

@@ -1,0 +1,36 @@
+digraph finite_state_machine {
+	rankdir=LR;
+	ranksep=1;
+	start = 7;
+	ratio = 0.4;
+	edge [len = 1];
+	node [shape = rect];
+		check [label="check chunk"]
+        write [label="write chunk"]
+		credit [label="send credit"]
+        status [label="send status"]
+        send_finished [label="send finished"]
+		error [label="send error"];
+    node [shape = doubleoctagon]
+		wait [label="wait"]
+        wait_finished [label="wait finished"]
+		success
+		failed;
+    node [shape = none, label=""] start;
+
+    start -> wait;
+    wait -> check;
+    check -> write;
+    write -> wait;
+    check -> wait;
+    wait -> status;
+    status -> wait;
+    wait -> credit;
+    credit -> wait;
+    write -> error;
+    error -> failed;
+    write -> send_finished;
+    send_finished -> wait_finished;
+    wait_finished -> success;
+    wait_finished -> send_finished;
+}
