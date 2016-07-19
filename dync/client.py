@@ -74,7 +74,8 @@ def parse_args(args=None):
         if args.file == '-':
             raise parser.error(
                 "Filename not known. Set it explicitly with --name")
-        args.name = os.path.basename(args.file)
+        args.name = args.file
+    args.name = os.path.basename(args.name)
 
     args.server = "tcp://{}:{}".format(args.server, args.port)
     return args
