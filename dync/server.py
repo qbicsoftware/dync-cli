@@ -227,10 +227,11 @@ class Server:
             if msg.command == b"post-file":
                 try:
                     self._add_upload(msg)
-                except Exception:
+                except Exception as e:
                     log.exception("Exception while creating new upload.")
                     self.send_error(
-                        msg.connection, 500, "Failed to create upload")
+                        msg.connection, 500,
+                        "Failed to create upload: " + str(e))
                 else:
                     self.log_status()
             else:
