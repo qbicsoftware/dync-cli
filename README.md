@@ -108,6 +108,24 @@ for more information see `dync -h`.
 
 ## Customize server side file storage
 
+## Create a systemd service
+
+A simple service file for systemd can look like this:
+
+```
+> cat /etc/systemd/system/dync.service
+[Unit]
+Description=Dync server for receiving files and forward them to dropboxes
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/dync-server
+```
+
+After that you have to ```sudo systemctl daemon-reload``` and then you can start the
+dync-server service with ```sudo systemctl start dync```
+
+
 # Related software
 
 # Performance
