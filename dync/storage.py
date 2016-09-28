@@ -105,4 +105,17 @@ class UploadFile:
             raise
         finally:
             self._cleanup()
+        self._write_checksum()
         log.info("Target file %s complete", self._destination)
+
+    def _write_checksum(self):
+        checksum_destination = "{}.sha256".format(self._destination)
+        try:
+            with open(checksum_destination, 'w') as fh:
+                fh.write("{}\t{}".format(self._hasher.hexdigest(),
+                                         os.path.basename(self._destination)))
+        except Exception as e:
+            log.error("Failed to create checksum file {}. Error: {}"
+                      .format(checksum_destination, str(e)))
+            raise
+        log.info("Wrote checksum file successfully.")
