@@ -139,8 +139,8 @@ be unique for each upload, eg an uuit4. Both set the zmq security
 mechanism to `CURVE` and provide appropriate keys.
 
 All messages are encoded as multipart messages, where the first frame is
-a command and the other frames are arguments. All integers use little
-endian encoding. Strings (filenames and json data) are encoded in utf8.
+a command and the other frames are arguments. All integers are in big
+endian byteorder. Strings (filenames and json data) are encoded in utf8.
 Error messages provide an error code and an error message. The error
 codes should follow the html error codes where possible.
 
@@ -166,7 +166,7 @@ error: <code: u32> <msg: utf8>
 The client initiates an upload by sending a `post-file` message. The
 flags field is not used at the moment and should be set to 0. It also
 provides a utf8 encoded filename and a json object as metadata. The
-server can reject the upload with an `error` message (if the client
+server can reject the upload with an `error` message (eg. if the client
 did not provide reasonable metadata) or approve it by sending an
 `upload-approved` message. This message also tells the client how may
 chunks it may send to the server (the credit), how large the chunks
@@ -176,14 +176,32 @@ chunks need to be sent again.
 
 #### Client behaviour
 
-After sending a `post-file` and receiving a `upload-approved` message
-the client adds chunks to the send queue until it runs of of credit
-or reaches the last chunk.
+The client connects a zmq `DEALER` socket with `curve` security and
+a random uuid as `IDENTITY` to the server.
 
-The client can now send chunks to the server until it either runs
-out of credit or reaches the last chunk. The last chunk is signalled
-by setting the least significant bit in the flags of the `post-chunk`
-message. It must also include a checksum of the whole file.
+After sending a `post-file` and receiving a `upload-approved` message
+the client adds chunks to the zmq send queue until it runs of of credit
+or reaches the last chunk. It keeps the last `maxqueue` chunks in
+memory.
+
+The last chunk is signalled by setting the least significant bit in
+the flags of the `post-chunk` message. The message must also include
+a sha256 checksum of the whole file.
+
+Once the client does not have any credit left, it waits for a
+`transfer-credit`, `status-report`, `upload-finished` or `error`
+message from the server. If it does not recieve any it sends a
+`query-status` message after a timeout and waits again. After a
+number of unsuccessful retries it sends an error message and aborts
+the upload.
+
+On recieving a `transfer-credit` message the client sends chunks from
+the position in the file where it left of. If it recieves a
+`status-report`, it resets the internal seed to the position specified
+in the server message and resends chunks. A well behaving server will
+not request chunks older than `maxqueue` (the maximum credit it will
+give to a client), thus the client can use the old chunks that are
+still in memory.
 
 ![Client state machine](/doc/client.png?raw=true "Client state machine")
 
