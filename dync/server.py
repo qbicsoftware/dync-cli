@@ -1,16 +1,23 @@
 import uuid
 import collections
-import logging
+import logging.config
 import sys
 import time
 import os
 import binascii
+import argparse
+import yaml
 
 import zmq
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
+
+if not hasattr(__builtins__, 'FileExistsError'):
+    FileExistsError = OSError
+if not hasattr(__builtins__, 'FileNotFoundError'):
+    FileNotFoundError = OSError
 
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -268,8 +275,50 @@ def prepare_auth(ctx, keydir):
     return auth, server_keys
 
 
+def parse_args():
+    """ Parser the command line argument, if any are present, such
+     as meta-data in form of key:value pairs"""
+    parser = argparse.ArgumentParser(
+        description='Server that handles the file upload and redirection'
+                    ' to openBis dropboxes.'
+    )
+    parser.add_argument('-c', '--config', default='/etc/dync/config.yaml')
+    parser.add_argument('-k', default=None, nargs='*')
+    args = parser.parse_args()
+    return args
+
+
+def load_config(cfg_file):
+    try:
+        with open(cfg_file) as f:
+            config = yaml.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError()
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(exc)
+    return config
+
+
 def main():
     ctx = zmq.Context()
+
+    args = parse_args()
+
+    try:        # Try to load the config file
+        config = load_config(args.config)
+    except FileNotFoundError:
+        log.error("Could not load configuration file {}".format(args.config))
+        sys.exit(1)
+    except yaml.YAMLError as exc:
+        log.error(exc)
+        sys.exit(1)
+
+    try:         # Try to parse the logging settings from the config
+        logging.config.dictConfig(config['logging'])
+    except Exception as e:
+        log.error("Could not load logger settings because of: {}".format(e))
+        sys.exit(1)
+
 
     try:
         auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
