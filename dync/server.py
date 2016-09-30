@@ -173,11 +173,11 @@ class Server:
             meta['destination'] = os.path.join(
                 self._config['outgoing']['manual'], meta['passthrough']
             )
-            return meta
         # TODO check openBis config in which dropbox the data has to be
-        # TODO assigned
+        # TODO assigned. Also check for barcode etc.
         else:
-            return meta
+            raise Exception("Could not determine correct storage "
+                            "destination for file")
 
     def _dispatch_connection(self, msg):
         try:
