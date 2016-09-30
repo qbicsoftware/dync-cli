@@ -4,6 +4,7 @@ import logging.config
 import sys
 import time
 import os
+import re
 import binascii
 import argparse
 import yaml
@@ -13,6 +14,7 @@ import zmq
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
+from .exceptions import OpenBisException, ConfigException
 
 if not hasattr(__builtins__, 'FileExistsError'):
     FileExistsError = OSError
@@ -131,7 +133,7 @@ class Upload:
 
 
 class Server:
-    def __init__(self, ctx, storage, address, server_keys):
+    def __init__(self, ctx, storage, address, server_keys, config):
         self._socket = ctx.socket(zmq.ROUTER)
         self._socket.curve_secretkey = server_keys[1]
         self._socket.curve_publickey = server_keys[0]
@@ -142,6 +144,7 @@ class Server:
         self._uploads = collections.OrderedDict()
         self._debt = 0
         self._last_active_check = time.time()
+        self._config = config
 
     def _add_upload(self, msg):
         log.info("Creating new upload.")
@@ -150,7 +153,11 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        file = self._storage.add_file(msg.name, msg.meta, msg.origin)
+        # TODO check if we can determine the proper destination
+        self._assign_destination(msg.meta)
+        file = self._storage.add_file(msg.name, msg.meta)
+
+        log.debug(msg.meta)
 
         try:
             conn = ServerConnection(self._socket, msg.connection)
@@ -160,6 +167,17 @@ class Server:
             raise
         self._debt += init_credit
         self._uploads[msg.connection] = upload
+
+    def _assign_destination(self, meta):
+        if 'passthrough' in meta.keys():
+            meta['destination'] = os.path.join(
+                self._config['outgoing']['manual'], meta['passthrough']
+            )
+            return meta
+        # TODO check openBis config in which dropbox the data has to be
+        # TODO assigned
+        else:
+            return meta
 
     def _dispatch_connection(self, msg):
         try:
@@ -283,7 +301,6 @@ def parse_args():
                     ' to openBis dropboxes.'
     )
     parser.add_argument('-c', '--config', default='/etc/dync/config.yaml')
-    parser.add_argument('-k', default=None, nargs='*')
     args = parser.parse_args()
     return args
 
@@ -296,7 +313,43 @@ def load_config(cfg_file):
         raise FileNotFoundError()
     except yaml.YAMLError as exc:
         raise yaml.YAMLError(exc)
+    _check_config(config)
     return config
+
+
+def _check_config(config):
+    for key in ['address', 'tmp_dir', 'outgoing', 'openbis', 'logging']:
+        if key not in config.keys():
+            raise ConfigException("Setting missing for: {}".format(key))
+
+
+def check_openbis(config):
+    """ Checks if the settings for the openBis
+    dropboxes are correct """
+    if not isinstance(config, list):
+        raise OpenBisException("Config section 'openbis' is not a list")
+    for conf in config:
+        for key in conf:
+            if key == 'regexp':
+                try:
+                    re.compile(conf[key])
+                except re.error:
+                    raise OpenBisException(
+                        "Invalid regular expression: %s" % conf[key])
+            elif key == 'path':
+                if not os.path.isdir(conf[key]):
+                    raise OpenBisException("Not a directory: %s" % conf[key])
+                if not os.path.isabs(conf[key]):
+                    raise OpenBisException("Not an absolute path: %s" % conf[key])
+            elif key == 'origin':
+                if not isinstance(conf[key], list):
+                    raise OpenBisException(
+                        "'origin' in 'openbis' section must be a list")
+            elif key in ['match_dir', 'match_file']:
+                pass
+            else:
+                raise OpenBisException(
+                    "Unexpected option %s in section 'openbis'" % key)
 
 
 def main():
@@ -312,6 +365,9 @@ def main():
     except yaml.YAMLError as exc:
         log.error(exc)
         sys.exit(1)
+    except ConfigException as exc:
+        log.error(exc)
+        sys.exit(1)
 
     try:         # Try to parse the logging settings from the config
         logging.config.dictConfig(config['logging'])
@@ -319,6 +375,11 @@ def main():
         log.error("Could not load logger settings because of: {}".format(e))
         sys.exit(1)
 
+    try:         # Check the openBis dropbox configuration
+        check_openbis(config['openbis'])
+    except OpenBisException as e:
+        log.error("Config error: {}".format(e))
+        sys.exit(1)
 
     try:
         auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
@@ -326,13 +387,16 @@ def main():
         log.critical("Failed to load keys", exc_info=True)
         return 1
 
-    path = "/tmp/dataserv"
-    address = "tcp://*:8889"
+    # TODO path will be determined by the client ID and filetype,
+    # or meta settings (like 'passthrough')
+    path = config['tmp_dir']
+
+    address = config['address']    # loads the address for binding
 
     with Storage(path) as storage:
         log.info("Starting server")
         try:
-            with Server(ctx, storage, address, server_keys) as server:
+            with Server(ctx, storage, address, server_keys, config) as server:
                 server.serve()
         except KeyboardInterrupt:
             pass

@@ -11,10 +11,22 @@ options:
     umask: 0077  # umask for all output files
 
 
+# The address and tcp port where the server listens for incoming messages
+# Default is 'tcp://*:8889'
+address: "tcp://*:8889"
+
+
+# Sets the default temp directory for the upload.
+# This directory has to be on the same file system as the
+# openBis dropboxes, otherwise the final file movement to the correct
+# dropbox will fail!
+tmp_dir: "/mnt/nfs/qbic/tmp"
+
+
+# Directions for redirecting uploaded files
 outgoing:
     manual: /path/to/manual/dest  # files that need to be processed manually
     storage: /path/to/storage     # backup of files, project-wise sorting
-    tmpdir: /path/to/tmpdir       # temp dir prefix for the upload
 
 
 # filenames are cleaned before they are matched against the regexps.

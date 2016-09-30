@@ -30,7 +30,7 @@ class Storage:
         self._files = {}
         self._destinations = set()
 
-    def add_file(self, filename, meta, user_id):
+    def add_file(self, filename, meta):
         file_id = uuid.uuid4().hex
         destination = self._destination_from_meta(filename, meta)
         assert destination not in self._destinations
@@ -52,8 +52,19 @@ class Storage:
         del self._files[file_id]
 
     def _destination_from_meta(self, filename, meta):
+        destination = meta['destination']
         if filename != os.path.basename(filename) or filename.startswith('.'):
-            raise ValueError("Inivalid filename: %s" % filename[:50])
+            raise ValueError("Invalid filename: %s" % filename[:50])
+
+        try:
+            os.makedirs(destination)
+        except Exception:
+            error_msg = 'Could not create destination folder {}'.format()
+            log.error(error_msg)
+            raise Exception(error_msg)
+
+        if os.path.isdir(destination) and os.access(destination, os.W_OK):
+            return os.path.join(destination, filename)
         return os.path.join(self._path, filename)
 
     def __enter__(self):
