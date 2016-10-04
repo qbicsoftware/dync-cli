@@ -308,9 +308,6 @@ def _check_config(config):
             raise ConfigException("Setting missing for: {}".format(key))
 
 
-
-
-
 def main():
     ctx = zmq.Context()
 
