@@ -18,9 +18,12 @@ import tempfile
 import hashlib
 import uuid
 import re
+import string
 from .exceptions import InvalidUploadRequest
 
 log = logging.getLogger(__name__)
+
+BARCODE_REGEX = "Q[A-X0-9]{4}[0-9]{3}[A-X][A-X0-9]"
 
 
 class Storage:
@@ -178,3 +181,65 @@ class UploadFile:
                 fh.write("{}\t{}".format(self._hasher.hexdigest(),
                                          os.path.basename(self._destination)))
         log.info("Wrote checksum file successfully.")
+
+
+def clean_filename(path):
+    """Generate a sane (alphanumeric) filename for path."""
+    allowed_chars = string.ascii_letters + string.digits + '_.'
+    stem, suffix = os.path.splitext(os.path.basename(path))
+    cleaned_stem = ''.join(i for i in stem if i in allowed_chars)
+    if not cleaned_stem:
+        raise ValueError("Invalid file name: %s", stem + suffix)
+
+    if not all(i in allowed_chars + '.' for i in suffix):
+        raise ValueError("Bad file suffix: " + suffix)
+
+    return cleaned_stem + suffix
+
+
+def extract_barcode(path):
+    """Extract an OpenBis barcode from the file name.
+    If a barcode is found, return it. Raise ValueError if no barcode,
+    or more that one barcode has been found.
+    Barcodes must match this regular expression: [A-Z]{5}[0-9]{3}[A-Z][A-Z0-9]
+    """
+    stem, suffix = os.path.splitext(os.path.basename(path))
+    barcodes = re.findall(BARCODE_REGEX, stem)
+    valid_barcodes = [b for b in barcodes if is_valid_barcode(b)]
+    if len(barcodes) != len(valid_barcodes):
+        log.warn("Invalid barcode in file name: %s",
+                    set(barcodes) - set(valid_barcodes))
+    if not barcodes:
+        raise ValueError("no barcodes found")
+    if len(set(barcodes)) > 1:
+        raise ValueError("more than one barcode in filename")
+    return barcodes[0]
+
+
+def generate_openbis_name(path):
+    r"""Generate a sane file name from the input file.
+    Copy the barcode to the front and remove invalid characters.
+    Raise ValueError if the filename does not contain a barcode.
+    Example
+    -------
+    >>> path = "stüpid\tname(<QJFDC010EU.).>ä.raW"
+    >>> generate_openbis_name(path)
+    'QJFDC010EU_stpidname.raw'
+    """
+    cleaned_name = clean_filename(path)
+    barcode = extract_barcode(cleaned_name)
+    name = cleaned_name.replace(barcode, "")
+    return barcode + '_' + name
+
+
+def is_valid_barcode(barcode):
+    """Check if barcode is a valid OpenBis barcode."""
+    if re.match('^' + BARCODE_REGEX + '$', barcode) is None:
+        return False
+    csum = sum(ord(c) * (i + 1) for i, c in enumerate(barcode[:-1]))
+    csum = csum % 34 + 48
+    if csum > 57:
+        csum += 7
+    if barcode[-1] == chr(csum):
+        return True
+    return False
