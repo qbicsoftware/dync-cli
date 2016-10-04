@@ -4,7 +4,6 @@ import logging.config
 import sys
 import time
 import os
-import re
 import binascii
 import argparse
 import yaml
@@ -14,7 +13,7 @@ import zmq
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
-from .exceptions import OpenBisException, ConfigException
+from .exceptions import ConfigException
 
 if not hasattr(__builtins__, 'FileExistsError'):
     FileExistsError = OSError
@@ -133,7 +132,7 @@ class Upload:
 
 
 class Server:
-    def __init__(self, ctx, storage, address, server_keys, config):
+    def __init__(self, ctx, storage, address, server_keys):
         self._socket = ctx.socket(zmq.ROUTER)
         self._socket.curve_secretkey = server_keys[1]
         self._socket.curve_publickey = server_keys[0]
@@ -144,7 +143,6 @@ class Server:
         self._uploads = collections.OrderedDict()
         self._debt = 0
         self._last_active_check = time.time()
-        self._config = config
 
     def _add_upload(self, msg):
         log.info("Creating new upload.")
@@ -153,8 +151,6 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        # TODO check if we can determine the proper destination
-        self._assign_destination(msg.meta)
         file = self._storage.add_file(msg.name, msg.meta)
 
         log.debug(msg.meta)
@@ -167,17 +163,6 @@ class Server:
             raise
         self._debt += init_credit
         self._uploads[msg.connection] = upload
-
-    def _assign_destination(self, meta):
-        if 'passthrough' in meta.keys():
-            meta['destination'] = os.path.join(
-                self._config['outgoing']['manual'], meta['passthrough']
-            )
-        # TODO check openBis config in which dropbox the data has to be
-        # TODO assigned. Also check for barcode etc.
-        else:
-            raise Exception("Could not determine correct storage "
-                            "destination for file")
 
     def _dispatch_connection(self, msg):
         try:
@@ -318,38 +303,12 @@ def load_config(cfg_file):
 
 
 def _check_config(config):
-    for key in ['address', 'tmp_dir', 'outgoing', 'openbis', 'logging']:
+    for key in ['address', 'tmp_dir', 'storage', 'logging']:
         if key not in config.keys():
             raise ConfigException("Setting missing for: {}".format(key))
 
 
-def check_openbis(config):
-    """ Checks if the settings for the openBis
-    dropboxes are correct """
-    if not isinstance(config, list):
-        raise OpenBisException("Config section 'openbis' is not a list")
-    for conf in config:
-        for key in conf:
-            if key == 'regexp':
-                try:
-                    re.compile(conf[key])
-                except re.error:
-                    raise OpenBisException(
-                        "Invalid regular expression: %s" % conf[key])
-            elif key == 'path':
-                if not os.path.isdir(conf[key]):
-                    raise OpenBisException("Not a directory: %s" % conf[key])
-                if not os.path.isabs(conf[key]):
-                    raise OpenBisException("Not an absolute path: %s" % conf[key])
-            elif key == 'origin':
-                if not isinstance(conf[key], list):
-                    raise OpenBisException(
-                        "'origin' in 'openbis' section must be a list")
-            elif key in ['match_dir', 'match_file']:
-                pass
-            else:
-                raise OpenBisException(
-                    "Unexpected option %s in section 'openbis'" % key)
+
 
 
 def main():
@@ -375,12 +334,6 @@ def main():
         log.error("Could not load logger settings because of: {}".format(e))
         sys.exit(1)
 
-    try:         # Check the openBis dropbox configuration
-        check_openbis(config['openbis'])
-    except OpenBisException as e:
-        log.error("Config error: {}".format(e))
-        sys.exit(1)
-
     try:
         auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
     except Exception:
@@ -393,10 +346,12 @@ def main():
 
     address = config['address']    # loads the address for binding
 
-    with Storage(path) as storage:
+    storage_opts = config['storage']
+
+    with Storage(path, storage_opts) as storage:
         log.info("Starting server")
         try:
-            with Server(ctx, storage, address, server_keys, config) as server:
+            with Server(ctx, storage, address, server_keys) as server:
                 server.serve()
         except KeyboardInterrupt:
             pass

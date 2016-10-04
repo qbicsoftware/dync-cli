@@ -213,5 +213,3 @@ class ClientConnection:
             b"error",
             code.to_bytes(4, 'big'),
             msg.encode('utf8')))
-
-

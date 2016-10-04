@@ -17,18 +17,23 @@ import os
 import tempfile
 import hashlib
 import uuid
+import re
+from .exceptions import InvalidUploadRequest
 
 log = logging.getLogger(__name__)
 
 
 class Storage:
-    def __init__(self, path):
+    def __init__(self, path, opts):
         log.info("Initialize storage at %s", path)
         if not os.path.isdir(path):
             raise ValueError("Invalid storage destination: %s" % path)
         self._path = path
         self._files = {}
         self._destinations = set()
+        self._opts = opts
+        # Check the openBis dropbox configuration
+        self.check_openbis()
 
     def add_file(self, filename, meta):
         file_id = uuid.uuid4().hex
@@ -52,6 +57,7 @@ class Storage:
         del self._files[file_id]
 
     def _destination_from_meta(self, filename, meta):
+        self._assign_destination(meta)
         destination = meta['destination']
         if filename != os.path.basename(filename) or filename.startswith('.'):
             raise ValueError("Invalid filename: %s" % filename[:50])
@@ -67,12 +73,59 @@ class Storage:
             return os.path.join(destination, filename)
         return os.path.join(self._path, filename)
 
+    def _assign_destination(self, meta):
+        """Helper function for self._destination_from_meta()
+        Searches for key:value directives for manual storage or uses the
+        respective openBis dropboxes, if no meta information is given.
+        The respective settings are made in the config."""
+        if 'passthrough' in meta.keys():
+            meta['destination'] = os.path.join(
+                self._opts['manual'], meta['passthrough']
+            )
+        # TODO check openBis config in which dropbox the data has to be
+        # TODO assigned. Also check for barcode etc.
+        else:
+            raise Exception("Could not determine correct storage "
+                            "destination for file")
+
     def __enter__(self):
         return self
 
     def __exit__(self, etype, evalue, trace):
         for file in list(self._files.values()):
             file._cleanup()
+
+    def check_openbis(self):
+        """Checks if the settings for the openBis
+        dropboxes are correct."""
+        config = self._opts['dropboxes']
+        if not isinstance(config, list):
+            raise InvalidUploadRequest(
+                "Config section 'openbis' is not a list")
+        for conf in config:
+            for key in conf:
+                if key == 'regexp':
+                    try:
+                        re.compile(conf[key])
+                    except re.error:
+                        raise InvalidUploadRequest(
+                            "Invalid regular expression: %s" % conf[key])
+                elif key == 'path':
+                    if not os.path.isdir(conf[key]):
+                        raise InvalidUploadRequest(
+                            "Not a directory: %s" % conf[key])
+                    if not os.path.isabs(conf[key]):
+                        raise InvalidUploadRequest(
+                            "Not an absolute path: %s" % conf[key])
+                elif key == 'origin':
+                    if not isinstance(conf[key], list):
+                        raise InvalidUploadRequest(
+                            "'origin' in 'openbis' section must be a list")
+                elif key in ['match_dir', 'match_file']:
+                    pass
+                else:
+                    raise InvalidUploadRequest(
+                        "Unexpected option %s in section 'openbis'" % key)
 
 
 class UploadFile:
@@ -121,12 +174,7 @@ class UploadFile:
 
     def _write_checksum(self):
         checksum_destination = "{}.sha256".format(self._destination)
-        try:
-            with open(checksum_destination, 'w') as fh:
+        with open(checksum_destination, 'w') as fh:
                 fh.write("{}\t{}".format(self._hasher.hexdigest(),
                                          os.path.basename(self._destination)))
-        except Exception as e:
-            log.error("Failed to create checksum file {}. Error: {}"
-                      .format(checksum_destination, str(e)))
-            raise
         log.info("Wrote checksum file successfully.")
