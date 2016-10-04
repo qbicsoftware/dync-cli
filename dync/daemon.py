@@ -8,7 +8,7 @@ import atexit
 import signal
 
 
-class daemon:
+class Daemon:
     """A generic daemon class.
 
     Usage: subclass the daemon class and override the run() method."""
@@ -46,6 +46,7 @@ class daemon:
         # redirect standard file descriptors
         sys.stdout.flush()
         sys.stderr.flush()
+
         si = open(os.devnull, 'r')
         so = open(os.devnull, 'a+')
         se = open(os.devnull, 'a+')
@@ -64,7 +65,7 @@ class daemon:
     def delpid(self):
         os.remove(self.pidfile)
 
-    def start(self):
+    def start(self, fun):
         """Start the daemon."""
 
         # Check for a pidfile to see if the daemon already runs
@@ -82,7 +83,7 @@ class daemon:
 
         # Start the daemon
         self.daemonize()
-        self.run()
+        self.run(fun)
 
     def stop(self):
         """Stop the daemon."""
@@ -119,8 +120,15 @@ class daemon:
         self.stop()
         self.start()
 
-    def run(self):
+    def run(self, fun):
         """You should override this method when you subclass Daemon.
 
         It will be called after the process has been daemonized by
         start() or restart()."""
+
+
+class DyncDaemon(Daemon):
+
+    def run(self, fun):
+        fun()
+

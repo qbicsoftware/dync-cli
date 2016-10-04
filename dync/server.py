@@ -11,6 +11,7 @@ import zmq
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
+from .daemon import DyncDaemon
 
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -268,7 +269,7 @@ def prepare_auth(ctx, keydir):
     return auth, server_keys
 
 
-def main():
+def init():
     ctx = zmq.Context()
 
     try:
@@ -291,6 +292,29 @@ def main():
             auth.stop()
             log.info("Server stopped.")
 
+
+def print_help_msg():
+    print("usage: {} start|stop|restart".
+          format(os.path.basename(sys.argv[1])))
+
+
+def main():
+    dync_dameon = DyncDaemon("/home/sven1103/.dync/dync.pid")
+    if len(sys.argv) == 2:
+        if sys.argv[1] == "start":
+            dync_dameon.start(init)
+        elif sys.argv[1] == "stop":
+            dync_dameon.stop()
+        elif sys.argv[1] == "restart":
+            dync_dameon.restart()
+        else:
+            print("unknown command"
+                  .format(sys.argv[1]))
+            print_help_msg()
+            sys.exit(1)
+    else:
+        print_help_msg()
+        sys.exit(2)
 
 if __name__ == '__main__':
     main()
