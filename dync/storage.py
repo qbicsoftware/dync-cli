@@ -65,13 +65,6 @@ class Storage:
         if filename != os.path.basename(filename) or filename.startswith('.'):
             raise ValueError("Invalid filename: %s" % filename[:50])
 
-        try:
-            os.makedirs(destination)
-        except Exception:
-            error_msg = 'Could not create destination folder {}'.format()
-            log.error(error_msg)
-            raise Exception(error_msg)
-
         if os.path.isdir(destination) and os.access(destination, os.W_OK):
             return os.path.join(destination, filename)
         return os.path.join(self._path, filename)
@@ -161,6 +154,7 @@ class UploadFile:
         self._cleanup()
 
     def finalize(self, remote_checksum):
+
         if remote_checksum != self._hasher.digest():
             raise RuntimeError("Failed finalizing file: checksum mismatch")
         self._file.close()
