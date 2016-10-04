@@ -1,17 +1,23 @@
 import uuid
 import collections
-import logging
+import logging.config
 import sys
 import time
 import os
 import binascii
-
+import yaml
 import zmq
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
 from .daemon import DyncDaemon
+from .exceptions import ConfigException
+
+if not hasattr(__builtins__, 'FileExistsError'):
+    FileExistsError = OSError
+if not hasattr(__builtins__, 'FileNotFoundError'):
+    FileNotFoundError = OSError
 
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -24,6 +30,8 @@ MAX_DEBT = 500
 MIN_DEBT = 300
 MAX_CREDIT = 200
 TRANSFER_THRESHOLD = 100
+
+SERVER_CONFIG = '/etc/dync.conf'  # The server config location
 
 
 class Upload:
@@ -144,7 +152,9 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        file = self._storage.add_file(msg.name, msg.meta, msg.origin)
+        file = self._storage.add_file(msg.name, msg.meta)
+
+        log.debug(msg.meta)
 
         try:
             conn = ServerConnection(self._socket, msg.connection)
@@ -228,10 +238,11 @@ class Server:
             if msg.command == b"post-file":
                 try:
                     self._add_upload(msg)
-                except Exception:
+                except Exception as e:
                     log.exception("Exception while creating new upload.")
                     self.send_error(
-                        msg.connection, 500, "Failed to create upload")
+                        msg.connection, 500,
+                        "Failed to create upload: " + str(e))
                 else:
                     self.log_status()
             else:
@@ -269,8 +280,44 @@ def prepare_auth(ctx, keydir):
     return auth, server_keys
 
 
+def load_config(cfg_file):
+    try:
+        with open(cfg_file) as f:
+            config = yaml.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError()
+    except yaml.YAMLError as exc:
+        raise yaml.YAMLError(exc)
+    _check_config(config)
+    return config
+
+
+def _check_config(config):
+    for key in ['address', 'tmp_dir', 'storage', 'logging']:
+        if key not in config.keys():
+            raise ConfigException("Setting missing for: {}".format(key))
+
+
 def init():
     ctx = zmq.Context()
+
+    try:        # Try to load the config file
+        config = load_config(SERVER_CONFIG)
+    except FileNotFoundError:
+        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
+        sys.exit(1)
+    except yaml.YAMLError as exc:
+        log.error(exc)
+        sys.exit(1)
+    except ConfigException as exc:
+        log.error(exc)
+        sys.exit(1)
+
+    try:         # Try to parse the logging settings from the config
+        logging.config.dictConfig(config['logging'])
+    except Exception as e:
+        log.error("Could not load logger settings because of: {}".format(e))
+        sys.exit(1)
 
     try:
         auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
@@ -278,10 +325,13 @@ def init():
         log.critical("Failed to load keys", exc_info=True)
         return 1
 
-    path = "/tmp/dataserv"
-    address = "tcp://*:8889"
+    path = config['tmp_dir']
 
-    with Storage(path) as storage:
+    address = config['address']    # loads the address for binding
+
+    storage_opts = config['storage']
+
+    with Storage(path, storage_opts) as storage:
         log.info("Starting server")
         try:
             with Server(ctx, storage, address, server_keys) as server:
