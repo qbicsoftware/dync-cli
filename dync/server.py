@@ -32,6 +32,8 @@ MIN_DEBT = 300
 MAX_CREDIT = 200
 TRANSFER_THRESHOLD = 100
 
+SERVER_CONFIG = '/etc/dync.conf'  # The server config location
+
 
 class Upload:
     def __init__(self, connection, target_file, origin, init_credit):
@@ -278,18 +280,6 @@ def prepare_auth(ctx, keydir):
     return auth, server_keys
 
 
-def parse_args():
-    """ Parser the command line argument, if any are present, such
-     as meta-data in form of key:value pairs"""
-    parser = argparse.ArgumentParser(
-        description='Server that handles the file upload and redirection'
-                    ' to openBis dropboxes.'
-    )
-    parser.add_argument('-c', '--config', default='/etc/dync/config.yaml')
-    args = parser.parse_args()
-    return args
-
-
 def load_config(cfg_file):
     try:
         with open(cfg_file) as f:
@@ -311,12 +301,10 @@ def _check_config(config):
 def main():
     ctx = zmq.Context()
 
-    args = parse_args()
-
     try:        # Try to load the config file
-        config = load_config(args.config)
+        config = load_config(SERVER_CONFIG)
     except FileNotFoundError:
-        log.error("Could not load configuration file {}".format(args.config))
+        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
         sys.exit(1)
     except yaml.YAMLError as exc:
         log.error(exc)
