@@ -299,7 +299,8 @@ def print_help_msg():
 
 
 def main():
-    dync_dameon = DyncDaemon("/home/sven1103/.dync/dync.pid")
+    umask = 0o022
+    dync_dameon = DyncDaemon("/home/sven1103/.dync/dync.pid", umask)
     if len(sys.argv) == 2:
         if sys.argv[1] == "start":
             dync_dameon.start(init)
