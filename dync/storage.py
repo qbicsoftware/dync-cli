@@ -60,8 +60,12 @@ class Storage:
         del self._files[file_id]
 
     def _destination_from_meta(self, filename, meta):
-        self._assign_destination(meta)
-        destination = meta['destination']
+        if 'passthrough' in meta.keys():  # Case: yet unregistered data
+            destination = self._check_destination(meta['passthrough'])
+        else:
+            # TODO openBis dropbox evaluation
+            return os.path.join(self._path, filename)
+
         if filename != os.path.basename(filename) or filename.startswith('.'):
             raise ValueError("Invalid filename: %s" % filename[:50])
 
@@ -69,20 +73,19 @@ class Storage:
             return os.path.join(destination, filename)
         return os.path.join(self._path, filename)
 
-    def _assign_destination(self, meta):
-        """Helper function for self._destination_from_meta()
-        Searches for key:value directives for manual storage or uses the
-        respective openBis dropboxes, if no meta information is given.
-        The respective settings are made in the config."""
-        if 'passthrough' in meta.keys():
-            meta['destination'] = os.path.join(
-                self._opts['manual'], meta['passthrough']
-            )
-        # TODO check openBis config in which dropbox the data has to be
-        # TODO assigned. Also check for barcode etc.
-        else:
-            raise Exception("Could not determine correct storage "
-                            "destination for file")
+    def _check_destination(self, passthrough):
+        """Checks the passthrough directive for the manual storage.
+        The directive will be a simple name, and a subdir with this name
+        will be created in self._path. No slashes, spaces or dots
+        are allowed."""
+        unallowed_symbols = ['\\', '/', '.', ' ']
+        for bad_symbol in unallowed_symbols:
+            if bad_symbol in passthrough:
+                raise InvalidUploadRequest(
+                    '\'{}\' symbol is not allowed as passthrough argument.'
+                    .format(bad_symbol)
+                )
+        return os.path.join(self._opts['manual'], passthrough)
 
     def __enter__(self):
         return self
