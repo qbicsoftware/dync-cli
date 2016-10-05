@@ -298,20 +298,8 @@ def _check_config(config):
             raise ConfigException("Setting missing for: {}".format(key))
 
 
-def init():
+def init(config):
     ctx = zmq.Context()
-
-    try:        # Try to load the config file
-        config = load_config(SERVER_CONFIG)
-    except FileNotFoundError:
-        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
-        sys.exit(1)
-    except yaml.YAMLError as exc:
-        log.error(exc)
-        sys.exit(1)
-    except ConfigException as exc:
-        log.error(exc)
-        sys.exit(1)
 
     try:         # Try to parse the logging settings from the config
         logging.config.dictConfig(config['logging'])
@@ -349,15 +337,29 @@ def print_help_msg():
 
 
 def main():
-    umask = 0o022
-    dync_dameon = DyncDaemon("/home/sven1103/.dync/dync.pid", umask)
+
+    try:  # Try to load the config file
+        config = load_config(SERVER_CONFIG)
+    except FileNotFoundError:
+        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
+        sys.exit(1)
+    except yaml.YAMLError as exc:
+        log.error(exc)
+        sys.exit(1)
+    except ConfigException as exc:
+        log.error(exc)
+        sys.exit(1)
+
+    opts = config['options']
+    dync_dameon = DyncDaemon(opts['pidfile'], opts['umask'])
+
     if len(sys.argv) == 2:
         if sys.argv[1] == "start":
-            dync_dameon.start(init)
+            dync_dameon.start(init, config)
         elif sys.argv[1] == "stop":
             dync_dameon.stop()
         elif sys.argv[1] == "restart":
-            dync_dameon.restart()
+            dync_dameon.restart(init, config)
         else:
             print("unknown command"
                   .format(sys.argv[1]))
