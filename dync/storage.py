@@ -78,14 +78,30 @@ class Storage:
         The directive will be a simple name, and a subdir with this name
         will be created in self._path. No slashes, spaces or dots
         are allowed."""
-        unallowed_symbols = ['\\', '/', '.', ' ']
-        for bad_symbol in unallowed_symbols:
-            if bad_symbol in passthrough:
-                raise InvalidUploadRequest(
-                    '\'{}\' symbol is not allowed as passthrough argument.'
-                    .format(bad_symbol)
-                )
+        if re.search(r'\W', passthrough):
+            raise InvalidUploadRequest(
+                'Only alphanumeric symbols and \'_\' are '
+                'allowed as passthrough argument.'
+            )
         return os.path.join(self._opts['manual'], passthrough)
+
+    def _find_openbis_dest(self, origin, name, is_dir):
+        """Determine the correct dropbox dependent on the settings in
+        the configuration file."""
+        for dropbox in self._opts['dropboxes']:
+            regexp, path = dropbox['regexp'], dropbox['path']
+            if 'origin' in dropbox and origin not in dropbox['origin']:
+                continue
+            if is_dir and not dropbox.get('match_dir', True):
+                continue
+            if not is_dir and not dropbox.get('match_file', True):
+                continue
+            if re.match(regexp, name):
+                log.debug("file %s matches regex %s", name, regexp)
+                return os.path.join(path, name)
+        log.error("File with barcode, but does not match " +
+                     "an openbis dropbox: %s", name)
+        raise ValueError('No known openbis dropbox for file %s' % name)
 
     def __enter__(self):
         return self
