@@ -41,7 +41,9 @@ class TestUpload:
             self.ctx, zmq.ROUTER, zmq.DEALER, id2=b"test")
 
         self.storage_dir = tempfile.mkdtemp()
-        self.storage = storage.Storage(self.storage_dir)
+
+        storage_conf = {'path': self.storage_dir, 'dropboxes': []}
+        self.storage = storage.Storage(storage_conf)
         self.conn = messages.ServerConnection(self.ssock, b"test")
         self.file = self.storage.add_file("name", {}, "user-id")
         self.upload = server.Upload(self.conn, self.file, "user-id", 10)

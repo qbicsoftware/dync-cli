@@ -12,13 +12,16 @@ options:
 # Default is 'tcp://*:8889'
 address: "tcp://*:8889"
 
-
-# Sets the default temp directory for the upload.
-# This directory has to be on the same file system as the
-# openBis dropboxes, otherwise the final file movement to the correct
-# dropbox will fail!
-tmp_dir: "/mnt/nfs/qbic/tmp"
-
+# Directions for redirecting uploaded files
+storage:
+    tmp_dir: /path/to/temp/storage # Location for temporary file upload storage
+    path: /path/to/default/storage # The default storage location
+    manual: /path/to/manual        # files that need to be processed manually
+    storage: /path/to/storage      # backup of files, project-wise sorting
+    dropboxes:
+       - regexp: "(.|\\n)*\\.pdf$"
+         path: "/tmp/dataserv/pdf"
+         origin: ["sfillinger"]
 
 # Directions for redirecting uploaded files
 storage:

@@ -153,7 +153,7 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        file = self._storage.add_file(msg.name, msg.meta)
+        file = self._storage.add_file(msg.name, msg.meta, msg.origin)
 
         log.debug(msg.meta)
 
@@ -294,7 +294,7 @@ def load_config(cfg_file):
 
 
 def _check_config(config):
-    for key in ['address', 'tmp_dir', 'storage', 'logging']:
+    for key in ['address', 'storage', 'logging']:
         if key not in config.keys():
             raise ConfigException("Setting missing for: {}".format(key))
 
@@ -306,13 +306,11 @@ def init(config):
 
     auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
 
-    path = config['tmp_dir']
-
     address = config['address']    # loads the address for binding
 
     storage_opts = config['storage']
 
-    with Storage(path, storage_opts) as storage:
+    with Storage(storage_opts) as storage:
         log.info("Starting server")
         try:
             with Server(ctx, storage, address, server_keys) as server:

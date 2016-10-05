@@ -7,7 +7,8 @@ from dync import storage
 
 
 def test_cleanup():
-    store = storage.Storage('/tmp')
+    config = {'path': 'path', 'dropboxes': []}
+    store = storage.Storage(config)
     with store:
         store.add_file('bar', {}, 'itsme')
         assert store.num_active == 1
@@ -17,7 +18,8 @@ def test_cleanup():
 class TestStorage:
     def setUp(self):
         self.path = tempfile.mkdtemp()
-        self.storage = storage.Storage(self.path)
+        storage_config = {'path': self.path, 'dropboxes': []}
+        self.storage = storage.Storage(storage_config)
 
     def tearDown(self):
         self.storage.__exit__(None, None, None)
