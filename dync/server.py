@@ -301,17 +301,9 @@ def _check_config(config):
 def init(config):
     ctx = zmq.Context()
 
-    try:         # Try to parse the logging settings from the config
-        logging.config.dictConfig(config['logging'])
-    except Exception as e:
-        log.error("Could not load logger settings because of: {}".format(e))
-        sys.exit(1)
+    logging.config.dictConfig(config['logging'])
 
-    try:
-        auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
-    except Exception:
-        log.critical("Failed to load keys", exc_info=True)
-        return 1
+    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
 
     path = config['tmp_dir']
 
@@ -332,22 +324,17 @@ def init(config):
 
 
 def print_help_msg():
-    print("usage: {} start|stop|restart".
-          format(os.path.basename(sys.argv[1])))
+    sys.stderr.write("usage: {} start|stop|restart\n".
+                     format(os.path.basename(sys.argv[1])))
 
 
 def main():
 
     try:  # Try to load the config file
         config = load_config(SERVER_CONFIG)
-    except FileNotFoundError:
+    except Exception as exc:
         log.error("Could not load configuration file {}".format(SERVER_CONFIG))
-        sys.exit(1)
-    except yaml.YAMLError as exc:
-        log.error(exc)
-        sys.exit(1)
-    except ConfigException as exc:
-        log.error(exc)
+        log.error("The issue was {}".format(exc))
         sys.exit(1)
 
     opts = config['options']
@@ -355,14 +342,21 @@ def main():
 
     if len(sys.argv) == 2:
         if sys.argv[1] == "start":
-            dync_dameon.start(init, config)
+            try:
+                dync_dameon.start(init, config)
+            except Exception as exc:
+                log.exception("Starting failed.")
+                sys.exit(1)
         elif sys.argv[1] == "stop":
             dync_dameon.stop()
         elif sys.argv[1] == "restart":
-            dync_dameon.restart(init, config)
+            try:
+                dync_dameon.restart(init, config)
+            except Exception as exc:
+                log.exception("Restarting failed.")
+                sys.exit(1)
         else:
-            print("unknown command"
-                  .format(sys.argv[1]))
+            sys.stderr.write("unknown command".format(sys.argv[1]))
             print_help_msg()
             sys.exit(1)
     else:
