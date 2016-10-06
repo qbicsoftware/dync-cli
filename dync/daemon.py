@@ -83,10 +83,8 @@ class Daemon:
         # Get the pid from the pidfile
         try:
             with open(self._pidfile, 'r') as pf:
-                pid = int(pf.read().strip())
-        except PermissionError:
-            raise PermissionError
-        except IOError:
+                    pid = int(pf.read().strip())
+        except FileNotFoundError:
             pid = None
 
         if pid is None:
