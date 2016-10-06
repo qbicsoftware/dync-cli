@@ -87,7 +87,7 @@ class Daemon:
         except IOError:
             pid = None
 
-        if not pid:
+        if pid is None:
             message = "pidfile {0} does not exist. " + \
                       "Daemon not running?\n"
             sys.stderr.write(message.format(self._pidfile))
@@ -95,20 +95,33 @@ class Daemon:
 
         # Try killing the daemon process
         try:
-            os.kill(pid, 0)
-        except OSError as err:
-            e = str(err.args)
-            if e.find("No such process") > 0:
-                if os.path.exists(self._pidfile):
-                    os.remove(self._pidfile)
-            else:
-                sys.stderr.write(str(err.args) + "\n")
-                sys.exit(1)
-        time.sleep(0.1)
-        # We checked if the process is present, so kill it
-        os.kill(pid, signal.SIGTERM)
-        if os.path.exists(self._pidfile):  # Remove the pid file
-            os.remove(self._pidfile)
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            try:
+                self.delpid()
+            except FileNotFoundError:
+                pass
+            except PermissionError:
+                print("Could not remove pidfile. Permission denied.")
+            return
+
+        time_passed = 0
+        while time_passed < 10:
+            time.sleep(0.1)
+            time_passed += 0.1
+            if not check_process(pid):
+                break
+        else:
+            print("Deamon does not shutdown on SIGTERM, killing it...",
+                  file=sys.stderr)
+            os.kill(pid, signal.SIGKILL)
+
+        try:
+            self.delpid()
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            print("Could not remove pidfile. Permission denied.")
 
     def restart(self, fun, arg):
         """Restart the daemon."""
@@ -127,3 +140,12 @@ class DyncDaemon(Daemon):
     def run(self, fun, arg):
         fun(arg)
 
+
+def check_process(pid):
+    """Check if process is running"""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    else:
+        return True
