@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Generic linux daemon base class for python 3.x."""
 
 import sys
@@ -52,7 +51,7 @@ class Daemon:
         atexit.register(self.delpid)
 
         pid = str(os.getpid())
-        with open(self._pidfile, 'w+') as f:
+        with open(self._pidfile, 'x') as f:
             f.write(pid + '\n')
 
     def delpid(self):
@@ -96,17 +95,20 @@ class Daemon:
 
         # Try killing the daemon process
         try:
-            while 1:
-                os.kill(pid, signal.SIGTERM)
-                time.sleep(0.1)
+            os.kill(pid, 0)
         except OSError as err:
             e = str(err.args)
             if e.find("No such process") > 0:
                 if os.path.exists(self._pidfile):
                     os.remove(self._pidfile)
             else:
-                print(str(err.args))
+                sys.stderr.write(str(err.args) + "\n")
                 sys.exit(1)
+        time.sleep(0.1)
+        # We checked if the process is present, so kill it
+        os.kill(pid, signal.SIGTERM)
+        if os.path.exists(self._pidfile):  # Remove the pid file
+            os.remove(self._pidfile)
 
     def restart(self, fun, arg):
         """Restart the daemon."""
