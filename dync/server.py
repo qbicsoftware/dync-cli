@@ -304,7 +304,7 @@ def init(config):
 
     logging.config.dictConfig(config['logging'])
 
-    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync.sh'))
+    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
 
     path = config['tmp_dir']
 
