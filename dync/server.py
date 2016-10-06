@@ -32,7 +32,7 @@ MIN_DEBT = 300
 MAX_CREDIT = 200
 TRANSFER_THRESHOLD = 100
 
-SERVER_CONFIG = '/etc/dync.sh.conf'  # The server config location
+SERVER_CONFIG = '/etc/dyncserver.yaml'  # The server config location
 
 
 class Upload:
