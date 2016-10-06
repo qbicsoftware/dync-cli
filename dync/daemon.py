@@ -64,7 +64,7 @@ class Daemon:
         try:
             with open(self._pidfile, 'r') as pf:
                 pid = int(pf.read().strip())
-        except IOError:
+        except FileNotFoundError:
             pid = None
 
         if pid:
