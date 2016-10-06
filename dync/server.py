@@ -32,7 +32,7 @@ MIN_DEBT = 300
 MAX_CREDIT = 200
 TRANSFER_THRESHOLD = 100
 
-SERVER_CONFIG = '/etc/dync.conf'  # The server config location
+SERVER_CONFIG = '/etc/dync.sh.conf'  # The server config location
 
 
 class Upload:
@@ -304,7 +304,7 @@ def init(config):
 
     logging.config.dictConfig(config['logging'])
 
-    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
+    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync.sh'))
 
     path = config['tmp_dir']
 
@@ -386,7 +386,7 @@ def main():
                 sys.exit(1)
 
         else:
-            sys.stderr.write("unknown command".format(sys.argv[1]))
+            print("unknown command".format(sys.argv[1]), file=sys.stderr)
             print_help_msg()
             sys.exit(1)
     else:  # execute in normal mode
