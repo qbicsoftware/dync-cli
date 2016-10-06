@@ -5,14 +5,14 @@ import sys
 import time
 import os
 import binascii
-import argparse
 import yaml
-
 import zmq
+import argparse
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
 from .auth import Authenticator, ThreadAuthenticator
+from .daemon import DyncDaemon
 from .exceptions import ConfigException
 
 if not hasattr(__builtins__, 'FileExistsError'):
@@ -32,7 +32,7 @@ MIN_DEBT = 300
 MAX_CREDIT = 200
 TRANSFER_THRESHOLD = 100
 
-SERVER_CONFIG = '/etc/dync.conf'  # The server config location
+SERVER_CONFIG = '/etc/dyncserver.yaml'  # The server config location
 
 
 class Upload:
@@ -299,35 +299,13 @@ def _check_config(config):
             raise ConfigException("Setting missing for: {}".format(key))
 
 
-def main():
+def init(config):
     ctx = zmq.Context()
 
-    try:        # Try to load the config file
-        config = load_config(SERVER_CONFIG)
-    except FileNotFoundError:
-        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
-        sys.exit(1)
-    except yaml.YAMLError as exc:
-        log.error(exc)
-        sys.exit(1)
-    except ConfigException as exc:
-        log.error(exc)
-        sys.exit(1)
+    logging.config.dictConfig(config['logging'])
 
-    try:         # Try to parse the logging settings from the config
-        logging.config.dictConfig(config['logging'])
-    except Exception as e:
-        log.error("Could not load logger settings because of: {}".format(e))
-        sys.exit(1)
+    auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
 
-    try:
-        auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
-    except Exception:
-        log.critical("Failed to load keys", exc_info=True)
-        return 1
-
-    # TODO path will be determined by the client ID and filetype,
-    # or meta settings (like 'passthrough')
     path = config['tmp_dir']
 
     address = config['address']    # loads the address for binding
@@ -345,6 +323,77 @@ def main():
             auth.stop()
             log.info("Server stopped.")
 
+
+def print_help_msg():
+    sys.stderr.write("usage: {} start|stop|restart\n".
+                     format(os.path.basename(sys.argv[0])))
+
+
+def parse_args():
+    """Read arguments from comman line"""
+
+    parser = argparse.ArgumentParser(
+        description='Listens for new files and distributes them ' +
+                    'to openBis dropboxes'
+    )
+    parser.add_argument('command', default=False)
+    parser.add_argument('-d', '--daemon', action='store_true', default=False)
+    args = parser.parse_args()
+
+    return args
+
+
+def main():
+
+    try:
+        args = parse_args()
+    except Exception:
+        log.exception("Parsing the command line arguments failed.")
+        sys.exit(1)
+
+    try:  # Try to load the config file
+        config = load_config(SERVER_CONFIG)
+    except Exception as exc:
+        log.error("Could not load configuration file {}".format(SERVER_CONFIG))
+        log.error("The issue was {}".format(exc))
+        sys.exit(1)
+
+    opts = config['options']
+
+    if args.daemon:  # execute as daemon
+        dync_dameon = DyncDaemon(opts['pidfile'], opts['umask'])
+
+        if args.command == "start":
+            try:
+                dync_dameon.start(init, config)
+            except PermissionError:
+                log.error("Permisson denied for pidfile")
+                sys.exit(1)
+            except Exception:
+                log.exception("Starting failed.")
+                sys.exit(1)
+        elif args.command == "stop":
+            try:
+                dync_dameon.stop()
+            except PermissionError:
+                log.error("Permisson denied")
+                sys.exit(1)
+        elif args.command == "restart":
+            try:
+                dync_dameon.restart(init, config)
+            except PermissionError:
+                log.error("Permisson denied")
+                sys.exit(1)
+            except Exception:
+                log.exception("Restarting failed.")
+                sys.exit(1)
+
+        else:
+            print("unknown command".format(sys.argv[1]), file=sys.stderr)
+            print_help_msg()
+            sys.exit(1)
+    else:  # execute in normal mode
+        init(config)
 
 if __name__ == '__main__':
     main()
