@@ -84,6 +84,8 @@ class Daemon:
         try:
             with open(self._pidfile, 'r') as pf:
                 pid = int(pf.read().strip())
+        except PermissionError:
+            raise PermissionError
         except IOError:
             pid = None
 
