@@ -370,13 +370,21 @@ def main():
                 log.exception("Starting failed.")
                 sys.exit(1)
         elif args.command == "stop":
-            dync_dameon.stop()
+            try:
+                dync_dameon.stop()
+            except PermissionError:
+                log.error("Permisson denied for pidfile")
+                sys.exit(1)
         elif args.command == "restart":
             try:
                 dync_dameon.restart(init, config)
+            except PermissionError:
+                log.error("Permisson denied for pidfile")
+                sys.exit(1)
             except Exception:
                 log.exception("Restarting failed.")
                 sys.exit(1)
+
         else:
             sys.stderr.write("unknown command".format(sys.argv[1]))
             print_help_msg()
