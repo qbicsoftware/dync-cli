@@ -7,6 +7,7 @@ import os
 import binascii
 import yaml
 import zmq
+import argparse
 
 from .messages import InvalidMessageError, ServerConnection, recv_msg_server
 from .storage import Storage
@@ -325,10 +326,30 @@ def init(config):
 
 def print_help_msg():
     sys.stderr.write("usage: {} start|stop|restart\n".
-                     format(os.path.basename(sys.argv[1])))
+                     format(os.path.basename(sys.argv[0])))
+
+
+def parse_args():
+    """Read arguments from comman line"""
+
+    parser = argparse.ArgumentParser(
+        description='Listens for new files and distributes them ' +
+                    'to openBis dropboxes'
+    )
+    parser.add_argument('command', default=False)
+    parser.add_argument('-d', '--daemon', action='store_true', default=False)
+    args = parser.parse_args()
+
+    return args
 
 
 def main():
+
+    try:
+        args = parse_args()
+    except Exception as exc:
+        log.exception("Parsing the command line arguments failed.")
+        sys.exit(1)
 
     try:  # Try to load the config file
         config = load_config(SERVER_CONFIG)
@@ -338,18 +359,19 @@ def main():
         sys.exit(1)
 
     opts = config['options']
-    dync_dameon = DyncDaemon(opts['pidfile'], opts['umask'])
 
-    if len(sys.argv) == 2:
-        if sys.argv[1] == "start":
+    if args.daemon:  # execute as daemon
+        dync_dameon = DyncDaemon(opts['pidfile'], opts['umask'])
+
+        if args.command == "start":
             try:
                 dync_dameon.start(init, config)
             except Exception as exc:
                 log.exception("Starting failed.")
                 sys.exit(1)
-        elif sys.argv[1] == "stop":
+        elif args.command == "stop":
             dync_dameon.stop()
-        elif sys.argv[1] == "restart":
+        elif args.command == "restart":
             try:
                 dync_dameon.restart(init, config)
             except Exception as exc:
@@ -359,9 +381,8 @@ def main():
             sys.stderr.write("unknown command".format(sys.argv[1]))
             print_help_msg()
             sys.exit(1)
-    else:
-        print_help_msg()
-        sys.exit(2)
+    else:  # execute in normal mode
+        init(config)
 
 if __name__ == '__main__':
     main()
