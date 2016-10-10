@@ -199,20 +199,21 @@ class UploadFile:
     def finalize(self, remote_checksum):
         """Empty buffers, move files, write checksum in file
         and write marker file when finished"""
-        # Check checksum first
         if remote_checksum != self._hasher.digest():
             raise RuntimeError("Failed finalizing file: checksum mismatch")
 
-        # Flush file buffers (uses native fsync in Unix)
-        try:
-            flush(self._file)
-        except Exception as exc:
-            log.error(
-                "Could not flush buffer for uploaded file or checksum."
-                "Error {}".format(str(exc)))
-            raise
+        flush(self._file)
         self._file.close()
+
         self._write_checksum()
+
+        # We need to flush the direcory to make sure the file metadata
+        # has been written to disk.
+        tmpdirfd = os.open(self._tmpdir, os.O_RDONLY)
+        try:
+            os.fsync(tmpdirfd)
+        finally:
+            os.close(tmpdirfd)
 
         # Move directory to target destination
         try:
@@ -224,6 +225,12 @@ class UploadFile:
         finally:
             self._cleanup()
 
+        destbasefd = os.open(os.path.dirname(self._destination), os.O_RDONLY)
+        try:
+            os.fsync(destbasefd)
+        finally:
+            os.close(destbasefd)
+
         # Write marker file when finished
         self._write_marker()
         log.info("Target file %s complete", self._destination)
@@ -231,9 +238,9 @@ class UploadFile:
     def _write_checksum(self):
         checksum_destination = "{}.sha256".format(self._tmppath)
         with open(checksum_destination, 'w') as fh:
-                fh.write("{}\t{}".format(self._hasher.hexdigest(),
-                                         os.path.basename(self._destination)))
-                flush(fh)
+            fh.write("{}\t{}".format(self._hasher.hexdigest(),
+                                     os.path.basename(self._destination)))
+            flush(fh)
         log.info("Wrote checksum file successfully.")
 
     def _write_marker(self):
