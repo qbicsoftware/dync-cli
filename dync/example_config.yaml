@@ -23,19 +23,6 @@ storage:
          path: "/tmp/dataserv/pdf"
          origin: ["sfillinger"]
 
-# Directions for redirecting uploaded files
-storage:
-    manual: /path/to/manual/dest  # files that need to be processed manually
-    backup: /path/to/storage     # backup of files, project-wise sorting
-    dropboxes:
-       - regexp: "^\\w*.raw$"
-         path: /path/to/raw/dropbox
-         match_file: True
-         match_dir: False  # do not match incoming directories
-         origin: ['dropbox1']  # only match files from these dropboxes
-       - regexp: "^\\w*.fastq$"
-         path: /path/to/fastq/dropbox
-
 
 # See https://docs.python.org/2/library/logging.config.html
 logging:

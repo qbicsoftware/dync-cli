@@ -69,7 +69,7 @@ class Storage:
         """Assign file target location based on meta-data, origin and
         file suffix"""
         if filename != os.path.basename(filename) or filename.startswith('.'):
-            raise InvalidUploadRequest("Invalid filename: %s" % filename[:50])
+            raise ValueError("Invalid filename: %s" % filename[:50])
 
         if 'passthrough' in meta.keys():
             dest_dir = self._dest_from_passthrough(meta['passthrough'])
@@ -205,7 +205,11 @@ class UploadFile:
         flush(self._file)
         self._file.close()
 
-        self._write_checksum()
+        try:
+            self._write_checksum()
+        except Exception as exc:
+            log.error('Could not write checksum because of reason: {}'
+                      .format(str(exc)))
 
         # We need to flush the direcory to make sure the file metadata
         # has been written to disk.
