@@ -205,11 +205,7 @@ class UploadFile:
         flush(self._file)
         self._file.close()
 
-        try:
-            self._write_checksum()
-        except Exception as exc:
-            log.error('Could not write checksum because of reason: {}'
-                      .format(str(exc)))
+        self._write_checksum()
 
         # We need to flush the direcory to make sure the file metadata
         # has been written to disk.
