@@ -81,13 +81,21 @@ class Upload:
             try:
                 self._file.finalize(msg.checksum)
             except Exception as e:
-                log.warn("Upload %s: Upload failed.", self._id)
+                log.error("Upload %s: Upload failed.", self._id, exc_info=True)
+                self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
+                return True, self._credit
             else:
                 log.info("Upload %s: Upload finished successfully", self._id)
                 self._conn.send_upload_finished(self._id)
         else:
-            self._file.write(msg.data)
+            try:
+                self._file.write(msg.data)
+            except Exception as e:
+                log.error("Writing to file failed", exc_info=True)
+                self._file.abort()
+                self._conn.send_error(code=500, msg=str(e))
+                return True, self._credit
             returned_credit = 1
 
         self._credit -= returned_credit
@@ -153,7 +161,7 @@ class Server:
 
         init_credit = min(MAX_CREDIT, max(0, MAX_DEBT - self._debt))
 
-        file = self._storage.add_file(msg.name, msg.meta)
+        file = self._storage.add_file(msg.name, msg.meta, msg.origin)
 
         log.debug(msg.meta)
 
@@ -294,7 +302,7 @@ def load_config(cfg_file):
 
 
 def _check_config(config):
-    for key in ['address', 'tmp_dir', 'storage', 'logging']:
+    for key in ['address', 'storage', 'logging']:
         if key not in config.keys():
             raise ConfigException("Setting missing for: {}".format(key))
 
@@ -306,13 +314,11 @@ def init(config):
 
     auth, server_keys = prepare_auth(ctx, os.path.expanduser('~/.dync'))
 
-    path = config['tmp_dir']
-
     address = config['address']    # loads the address for binding
 
     storage_opts = config['storage']
 
-    with Storage(path, storage_opts) as storage:
+    with Storage(storage_opts) as storage:
         log.info("Starting server")
         try:
             with Server(ctx, storage, address, server_keys) as server:

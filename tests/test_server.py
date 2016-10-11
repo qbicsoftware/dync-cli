@@ -41,9 +41,17 @@ class TestUpload:
             self.ctx, zmq.ROUTER, zmq.DEALER, id2=b"test")
 
         self.storage_dir = tempfile.mkdtemp()
-        self.storage = storage.Storage(self.storage_dir)
+        self.manual_dir = os.mkdir(os.path.join(self.storage_dir, "test"))
+        storage_conf = {
+            'path': self.storage_dir,
+            'tmp_dir': self.storage_dir,
+            'manual': self.storage_dir,
+            'storage': self.storage_dir,
+            'dropboxes': []}
+        self.storage = storage.Storage(storage_conf)
         self.conn = messages.ServerConnection(self.ssock, b"test")
-        self.file = self.storage.add_file("name", {}, "user-id")
+        self.file = self.storage.add_file(
+            "name", {'passthrough': "test"}, "user-id")
         self.upload = server.Upload(self.conn, self.file, "user-id", 10)
         reply = self.csock.recv_multipart()
 
@@ -62,7 +70,8 @@ class TestUpload:
             pass
 
     def test_init(self):
-        file = self.storage.add_file("name2", {}, "user-id")
+        file = self.storage.add_file(
+            "name2", {'passthrough': 'test'}, "user-id")
         upload = server.Upload(self.conn, file, "user-id", 10)
         reply = self.csock.recv_multipart()
         assert reply[0] == b"upload-approved"
