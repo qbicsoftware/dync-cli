@@ -175,6 +175,7 @@ class UploadFile:
         self._destination = destination
         self._hasher = hashlib.sha256()
         self.nbytes_written = 0
+        self._cleanup_called = False
 
     def write(self, data):
         self._file.write(data)
@@ -182,6 +183,12 @@ class UploadFile:
         self.nbytes_written += len(data)
 
     def _cleanup(self):
+        """This method should only be called once in a UploadFile's lifetime"""
+        if self._cleanup_called:
+            log.error("Cleanup method has been called before.",
+                      stack_info=True)
+            return
+        self._cleanup_called = True
         self._file.close()
         try:
             os.unlink(self._tmppath)
@@ -216,13 +223,9 @@ class UploadFile:
             os.close(tmpdirfd)
 
         # Move directory to target destination
-        try:
-            os.rename(self._tmpdir, self._destination)
-        except Exception as e:
-            log.error("Failed to move %s to %s. Error: %s",
-                      self._tmpdir, self._destination, str(e))
-            raise
+        os.rename(self._tmpdir, self._destination)
 
+        # Always clean up :)
         self._cleanup()
 
         destbasefd = os.open(os.path.dirname(self._destination), os.O_RDONLY)
