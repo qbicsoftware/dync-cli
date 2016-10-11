@@ -221,7 +221,6 @@ class UploadFile:
         except Exception as e:
             log.error("Failed to move %s to %s. Error: %s",
                       self._tmpdir, self._destination, str(e))
-            self.abort()
             raise
 
         self._cleanup()
