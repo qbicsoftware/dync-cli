@@ -85,7 +85,7 @@ class Upload:
                 log.warn(str(e))
                 self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
-                return True, 0
+                return True, self._credit
             else:
                 log.info("Upload %s: Upload finished successfully", self._id)
                 self._conn.send_upload_finished(self._id)
@@ -97,7 +97,7 @@ class Upload:
                           .format(str(e)))
                 self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
-                return True, 0
+                return True, self._credit
             returned_credit = 1
 
         self._credit -= returned_credit

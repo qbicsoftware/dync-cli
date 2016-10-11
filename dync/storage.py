@@ -225,9 +225,10 @@ class UploadFile:
         except Exception as e:
             log.error("Failed to move %s to %s. Error: %s",
                       self._tmpdir, self._destination, str(e))
+            self.abort()
             raise
-        finally:
-            self._cleanup()
+
+        self._cleanup()
 
         destbasefd = os.open(os.path.dirname(self._destination), os.O_RDONLY)
         try:
