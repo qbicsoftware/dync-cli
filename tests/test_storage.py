@@ -78,15 +78,15 @@ class TestStorage:
         assert not os.path.exists(file._tmpdir)
 
     def test_invalid_filename(self):
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file("..", {'passthrough': 'test'}, "b")
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file(".", {'passthrough': 'test'}, "b")
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file(".blubb", {'passthrough': 'test'}, "b")
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file("/hallo/", {'passthrough': 'test'}, "b")
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file("/", {'passthrough': 'test'}, "b")
-        with assert_raises(ValueError):
+        with assert_raises(InvalidUploadRequest):
             self.storage.add_file("hallo/hi", {'passthrough': 'test'}, "b")

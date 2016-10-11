@@ -40,7 +40,11 @@ class Storage:
 
     def add_file(self, filename, meta, origin):
         file_id = uuid.uuid4().hex
-        clean_name = clean_filename(filename)
+
+        try:
+            clean_name = clean_filename(filename)
+        except ValueError as e:
+            raise InvalidUploadRequest("Bad filename: %s" % filename[:200])
 
         dest = self._destination_from_meta(filename, clean_name, meta, origin)
         if dest in self._destinations:
@@ -69,7 +73,7 @@ class Storage:
         """Assign file target location based on meta-data, origin and
         file suffix"""
         if filename != os.path.basename(filename) or filename.startswith('.'):
-            raise ValueError("Invalid filename: %s" % filename[:50])
+            raise InvalidUploadRequest("Invalid filename: %s" % filename[:50])
 
         if 'passthrough' in meta.keys():
             dest_dir = self._dest_from_passthrough(meta['passthrough'])
@@ -275,7 +279,7 @@ def clean_filename(path):
     cleaned_stem = ''.join(i for i in stem if i in allowed_chars)
     cleaned_stem = cleaned_stem.lstrip('.')
     if not cleaned_stem:
-        raise ValueError("Invalid file name: %s", stem + suffix)
+        raise ValueError("Invalid file name: %s" % stem + suffix)
 
     if not all(i in allowed_chars for i in suffix):
         raise ValueError("Bad file suffix: " + suffix)
