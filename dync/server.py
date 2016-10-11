@@ -82,6 +82,7 @@ class Upload:
                 self._file.finalize(msg.checksum)
             except Exception as e:
                 log.warn("Upload %s: Upload failed.", self._id)
+                log.warn(str(e))
                 self._conn.send_error(code=500, msg=str(e))
             else:
                 log.info("Upload %s: Upload finished successfully", self._id)
