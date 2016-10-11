@@ -83,12 +83,21 @@ class Upload:
             except Exception as e:
                 log.warn("Upload %s: Upload failed.", self._id)
                 log.warn(str(e))
+                self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
+                return True, 0
             else:
                 log.info("Upload %s: Upload finished successfully", self._id)
                 self._conn.send_upload_finished(self._id)
         else:
-            self._file.write(msg.data)
+            try:
+                self._file.write(msg.data)
+            except Exception as e:
+                log.error("Writing to file failed because of reason: {}"
+                          .format(str(e)))
+                self._file.abort()
+                self._conn.send_error(code=500, msg=str(e))
+                return True, 0
             returned_credit = 1
 
         self._credit -= returned_credit
