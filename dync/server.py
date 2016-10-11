@@ -81,8 +81,7 @@ class Upload:
             try:
                 self._file.finalize(msg.checksum)
             except Exception as e:
-                log.warn("Upload %s: Upload failed.", self._id)
-                log.warn(str(e))
+                log.error("Upload %s: Upload failed.", self._id, exc_info=True)
                 self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
                 return True, self._credit
@@ -93,8 +92,7 @@ class Upload:
             try:
                 self._file.write(msg.data)
             except Exception as e:
-                log.error("Writing to file failed because of reason: {}"
-                          .format(str(e)))
+                log.error("Writing to file failed", exc_info=True)
                 self._file.abort()
                 self._conn.send_error(code=500, msg=str(e))
                 return True, self._credit
