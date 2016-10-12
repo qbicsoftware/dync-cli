@@ -46,7 +46,7 @@ pip install dync
 
 or for the development version
 ```
-pip install git+https://github.com/aseyboldt/dync
+pip install git+https://github.com/qbicsoftware/dync
 ```
 
 To get a progress bar on the client you also need to install `tqdm`.
