@@ -109,7 +109,7 @@ class Storage:
                 continue
             if not is_dir and not dropbox.get('match_file', True):
                 continue
-            if dropbox.get('requires_barcode', True):
+            if dropbox.get('requires_barcode', False):
                 try:
                     extract_barcode(name)
                 except ValueError:
