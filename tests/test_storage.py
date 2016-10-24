@@ -3,6 +3,7 @@ import os
 import hashlib
 import shutil
 from nose.tools import assert_raises
+from nose.tools import assert_is_none
 from dync import storage
 from dync.exceptions import InvalidUploadRequest
 
@@ -28,13 +29,20 @@ class TestStorage:
     def setUp(self):
         self.path = tempfile.mkdtemp()
         self.test_target_dir = os.path.join(self.path, 'test')
+        self.test_dropbox = os.path.join(self.path, 'pdf')
         os.mkdir(self.test_target_dir)
+        os.mkdir(self.test_dropbox)
+
+        self.dropbox = [{'regexp': "(.|\\n)*\\.pdf$",
+                         'path': self.test_dropbox,
+                         'origin': ["sfillinger"]}]
+
         storage_config = {
             'path': self.path,
             'tmp_dir': self.path,
             'manual': self.path,
             'storage': self.path,
-            'dropboxes': []}
+            'dropboxes': self.dropbox}
         self.storage = storage.Storage(storage_config)
 
     def tearDown(self):
@@ -90,3 +98,22 @@ class TestStorage:
             self.storage.add_file("/", {'passthrough': 'test'}, "b")
         with assert_raises(InvalidUploadRequest):
             self.storage.add_file("hallo/hi", {'passthrough': 'test'}, "b")
+
+    def test_dest_from_passthrough(self):
+        with assert_raises(InvalidUploadRequest):
+            self.storage._dest_from_passthrough("/home/user")
+        with assert_raises(InvalidUploadRequest):
+            self.storage._dest_from_passthrough("../../test")
+        with assert_raises(InvalidUploadRequest):
+            self.storage._dest_from_passthrough(".")
+        assert self.storage._dest_from_passthrough("sven") ==\
+            os.path.join(self.path, "sven")
+
+    def test_find_openbis_dest(self):
+        assert not self.dropbox[0].get('requires_barcode', False)
+        assert self.storage._find_openbis_dest("sfillinger", "test.pdf", is_dir=False) \
+            == self.test_dropbox
+        assert not self.storage._find_openbis_dest("sfillinger", "test.raw", is_dir=False) \
+            == self.test_dropbox
+        assert_is_none(self.storage._find_openbis_dest("sfillinger", "test.pdf", is_dir=True))
+        assert_is_none(self.storage._find_openbis_dest("aseiboldt", "test.pdf", is_dir=False))
