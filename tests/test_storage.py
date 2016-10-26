@@ -35,6 +35,8 @@ class TestStorage:
 
         self.dropbox = [{'regexp': "(.|\\n)*\\.pdf$",
                          'path': self.test_dropbox,
+                         'requires_barcode': False,
+                         'match_file': True,
                          'origin': ["sfillinger"]}]
 
         storage_config = {
@@ -115,5 +117,6 @@ class TestStorage:
             == self.test_dropbox
         assert not self.storage._find_openbis_dest("sfillinger", "test.raw", is_dir=False) \
             == self.test_dropbox
-        assert_is_none(self.storage._find_openbis_dest("sfillinger", "test.pdf", is_dir=True))
+        assert self.storage._find_openbis_dest("sfillinger", "test.pdf", is_dir=True) \
+            == self.test_dropbox
         assert_is_none(self.storage._find_openbis_dest("aseiboldt", "test.pdf", is_dir=False))
