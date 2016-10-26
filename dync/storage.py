@@ -105,7 +105,7 @@ class Storage:
             regexp, path = dropbox['regexp'], dropbox['path']
             if 'origin' in dropbox and origin not in dropbox['origin']:
                 continue
-            if is_dir and not dropbox.get('match_dir', False):
+            if is_dir and not dropbox.get('match_dir', True):
                 continue
             if not is_dir and not dropbox.get('match_file', True):
                 continue
@@ -117,6 +117,7 @@ class Storage:
             if re.match(regexp, name):
                 log.debug("file %s matches regex %s", name, regexp)
                 return path
+
         return None
 
     def __enter__(self):
