@@ -243,7 +243,7 @@ class UploadFile:
         log.info("Target file %s complete", self._destination)
 
     def _write_checksum(self):
-        checksum_destination = "{}.sha256".format(self._tmppath)
+        checksum_destination = "{}.sha256sum".format(self._tmppath)
         with open(checksum_destination, 'w') as fh:
             fh.write("{}\t{}".format(self._hasher.hexdigest(),
                                      os.path.basename(self._destination)))
