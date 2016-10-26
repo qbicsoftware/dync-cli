@@ -217,6 +217,8 @@ class UploadFile:
         self._file.close()
 
         self._write_checksum()
+        self._write_orig_filename()
+        self._write_source_file()
 
         # We need to flush the direcory to make sure the file metadata
         # has been written to disk.
@@ -241,6 +243,25 @@ class UploadFile:
         # Write marker file when finished
         self._write_marker()
         log.info("Target file %s complete", self._destination)
+
+    def _write_orig_filename(self):
+        """ETL scripts expect the original filename too,
+        especially if the script refactored the name"""
+        extension = "origlabfilename"
+        with open("{}.{}".format(self._clean_name, extension), 'w') as fh:
+            fh.write(self._filename)
+            flush(fh)
+        log.info("Wrote original file name")
+
+    def _write_source_file(self):
+        """Based on the origin, ETL scripts will handle files
+        differently. For that the ETL scripts a source_dropbox.txt with the
+        origin lab the data come from"""
+        source_file = "source_dropbox.txt"
+        with open(source_file, 'w') as fh:
+            fh.write(self._origin)
+            flush(fh)
+        log.info("Wrote source text file.")
 
     def _write_checksum(self):
         checksum_destination = "{}.sha256sum".format(self._tmppath)
