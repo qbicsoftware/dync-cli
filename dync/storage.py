@@ -248,7 +248,8 @@ class UploadFile:
         """ETL scripts expect the original filename too,
         especially if the script refactored the name"""
         extension = "origlabfilename"
-        with open("{}.{}".format(self._clean_name, extension), 'w') as fh:
+        filename = "{}.{}".format(self._tmppath, extension)
+        with open(filename, 'w') as fh:
             fh.write(self._filename)
             flush(fh)
         log.info("Wrote original file name")
@@ -258,7 +259,9 @@ class UploadFile:
         differently. For that the ETL scripts a source_dropbox.txt with the
         origin lab the data come from"""
         source_file = "source_dropbox.txt"
-        with open(source_file, 'w') as fh:
+        filename = os.path.join(self._tmpdir, source_file)
+
+        with open(filename, 'w') as fh:
             fh.write(self._origin)
             flush(fh)
         log.info("Wrote source text file.")
