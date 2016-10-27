@@ -30,13 +30,20 @@ class TestStorage:
         self.path = tempfile.mkdtemp()
         self.test_target_dir = os.path.join(self.path, 'test')
         self.test_dropbox = os.path.join(self.path, 'pdf')
+        self.raw_dropbox = os.path.join(self.path, 'raw')
         os.mkdir(self.test_target_dir)
         os.mkdir(self.test_dropbox)
+        os.mkdir(self.raw_dropbox)
 
         self.dropbox = [{'regexp': "(.|\\n)*\\.pdf$",
                          'path': self.test_dropbox,
                          'requires_barcode': False,
-                         'origin': ["sfillinger"]}]
+                         'origin': ["sfillinger"]},
+                        {'regexp': "(.|\\n)*\\.raw$",
+                         'path': self.raw_dropbox,
+                         'requires_barcode': True,
+                         'origin': ["sven"]}
+                        ]
 
         storage_config = {
             'path': self.path,
@@ -119,3 +126,23 @@ class TestStorage:
         assert self.storage._find_openbis_dest("sfillinger", "test.pdf", is_dir=True) \
             == self.test_dropbox
         assert_is_none(self.storage._find_openbis_dest("aseiboldt", "test.pdf", is_dir=False))
+        assert_is_none(self.storage._find_openbis_dest("sven", "my.raw", is_dir=False))
+        # Test barcode validation for dropbox
+        assert self.storage._find_openbis_dest("sven", "QQBIC001AH_my.raw", is_dir=False) \
+            == self.raw_dropbox
+        # Do not assign dropbox if barcode is invalid
+        assert_is_none(self.storage._find_openbis_dest("sven", "QQBIC001AA_my.raw",
+                                               is_dir=False))
+
+
+def test_is_valid_barcode():
+    assert storage.is_valid_barcode('QQBIC001AH')
+    assert not storage.is_valid_barcode('QQBIC001AA')
+
+
+def test_extract_barcode():
+    with assert_raises(ValueError):
+        storage.extract_barcode("/test/lolipop")
+    assert storage.extract_barcode("/test/QQBIC001AK_lolipop") == 'QQBIC001AK'
+
+
