@@ -36,7 +36,6 @@ class TestStorage:
         self.dropbox = [{'regexp': "(.|\\n)*\\.pdf$",
                          'path': self.test_dropbox,
                          'requires_barcode': False,
-                         'match_file': True,
                          'origin': ["sfillinger"]}]
 
         storage_config = {
