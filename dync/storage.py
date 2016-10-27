@@ -356,4 +356,5 @@ def is_valid_barcode(barcode):
         csum += 7
     if barcode[-1] == chr(csum):
         return True
+    log.debug("Checksum for barcode was not correct.")
     return False
