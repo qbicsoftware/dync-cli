@@ -111,7 +111,9 @@ class Storage:
                 continue
             if dropbox.get('requires_barcode', True):
                 try:
-                    extract_barcode(name)
+                    barcode = extract_barcode(name)
+                    if not is_valid_barcode(barcode):
+                        continue
                 except ValueError:
                     continue
             if re.match(regexp, name):
