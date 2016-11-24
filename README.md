@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/aseyboldt/dync.svg?branch=master)](https://travis-ci.org/aseyboldt/dync)
 
-# dync
+![dync-logo](https://github.com/qbicsoftware/dync/blob/master/dync_logo.png)
 
 *This is work in progress!*
 
