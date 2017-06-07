@@ -185,7 +185,11 @@ class UploadFile:
         self.nbytes_written = 0
         self._cleanup_called = False
         self._istar = False
+        self._untar = False
         self._orig_tarname = []
+
+        if 'untar' in meta.keys():
+            self._untar = True if meta['untar'] == 'True' else False
 
     def write(self, data):
         self._file.write(data)
@@ -222,23 +226,30 @@ class UploadFile:
         flush(self._file)
         self._file.close()
 
-        if tarfile.is_tarfile(self._tmppath):
+        if tarfile.is_tarfile(self._tmppath) and self._untar:
             self._istar = True
             log.info("Tar archive detected.")
-            tar = tarfile.open(self._tmppath, 'r')
-            tar.extractall(self._tmpdir)
-            self._orig_tarname = [subdir for subdir in tar.getnames() if
-                                       '/' not in subdir and '/' not in subdir[0]]
-            if len(self._orig_tarname) != 1:
-                raise RuntimeError("The original unique tar archive name could"
-                                   "not be trieved by dync.")
-            log.info("Determined tar archive name {}".format(
-                self._orig_tarname[0]))
-            os.remove(self._tmppath)
-            self._tmppath = self._tmpdir + os.path.sep + \
-                            self._orig_tarname[0]
-            log.info("new path is {}".format(self._tmppath))
-            tar.close()
+            with tarfile.open(self._tmppath, 'r') as tar:
+                if len(tar.getnames()) > 10:
+                    log.error("Tar archive contained {} files. Untar was "
+                              "prevented".format(len(tar.getnames())))
+                    self.abort()
+                    raise RuntimeError("You are not allowed to have more "
+                                       "than 10 files in your archive.")
+
+                tar.extractall(self._tmpdir)
+                self._orig_tarname = [subdir for subdir in tar.getnames() if
+                                           '/' not in subdir and '/' not in subdir[0]]
+                if len(self._orig_tarname) != 1:
+                    raise RuntimeError("The original unique tar archive name could"
+                                       "not be trieved by dync.")
+                log.info("Determined tar archive name {}".format(
+                    self._orig_tarname[0]))
+                os.remove(self._tmppath)
+                self._tmppath = self._tmpdir + os.path.sep + \
+                                self._orig_tarname[0]
+                log.info("new path is {}".format(self._tmppath))
+                tar.close()
 
         if not self._istar:
             self._write_checksum()
@@ -254,12 +265,19 @@ class UploadFile:
             os.close(tmpdirfd)
 
         # Move directory to target destination
-        if self._istar:
+        if self._istar and self._untar:
             log.info(self._destination)
             new_destination = os.path.dirname(self._destination) + os.path.sep + \
                             self._orig_tarname[0]
-            os.rename(self._tmppath, new_destination)
-            os.removedirs(self._tmpdir)
+            try:
+                os.rename(self._tmppath, new_destination)
+            except Exception as e:
+                log.error("Exception during moving the untared archive.", e)
+                self.abort()
+                raise RuntimeError("Untared archive could not be moved to "
+                                   " the correct dropbox.")
+            finally:
+                shutil.rmtree(self._tmpdir)
         else:
             os.rename(self._tmpdir, self._destination)
 
