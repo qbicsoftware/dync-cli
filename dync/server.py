@@ -33,7 +33,7 @@ TRANSFER_THRESHOLD = 100
 
 SERVER_CONFIG = '/etc/dyncserver.yaml'  # The server config location
 
-VERSION = "0.9beta"
+VERSION = "0.2dev"
 
 class Upload:
     def __init__(self, connection, target_file, origin, init_credit):
