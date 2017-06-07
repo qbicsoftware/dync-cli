@@ -23,7 +23,6 @@ if not hasattr(__builtins__, 'FileNotFoundError'):
 log = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
-
 CHUNKSIZE = 120 * 1024
 TIMEOUT = 3600
 
@@ -34,6 +33,7 @@ TRANSFER_THRESHOLD = 100
 
 SERVER_CONFIG = '/etc/dyncserver.yaml'  # The server config location
 
+VERSION = "0.9beta"
 
 class Upload:
     def __init__(self, connection, target_file, origin, init_credit):
@@ -319,7 +319,7 @@ def init(config):
     storage_opts = config['storage']
 
     with Storage(storage_opts) as storage:
-        log.info("Starting server")
+        log.info("Starting dync server (Version {})".format(VERSION))
         try:
             with Server(ctx, storage, address, server_keys) as server:
                 server.serve()
