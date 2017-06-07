@@ -187,6 +187,7 @@ class UploadFile:
         self._istar = False
         self._untar = False
         self._orig_tarname = []
+        self._corrected_destination = ""
 
         if 'untar' in meta.keys():
             self._untar = True if meta['untar'] == 'True' else False
@@ -237,6 +238,7 @@ class UploadFile:
                     raise RuntimeError("You are not allowed to have more "
                                        "than 10 files in your archive.")
 
+                log.info("Extracting {}".format(self._tmppath))
                 tar.extractall(self._tmpdir)
                 self._orig_tarname = [subdir for subdir in tar.getnames() if
                                            '/' not in subdir and '/' not in subdir[0]]
@@ -246,6 +248,8 @@ class UploadFile:
                 log.info("Determined tar archive name {}".format(
                     self._orig_tarname[0]))
                 os.remove(self._tmppath)
+                self._corrected_destination = os.path.dirname(self._destination) \
+                    + os.path.sep + self._orig_tarname[0]
                 self._tmppath = self._tmpdir + os.path.sep + \
                                 self._orig_tarname[0]
                 log.info("new path is {}".format(self._tmppath))
@@ -325,13 +329,19 @@ class UploadFile:
         log.info("Wrote checksum file successfully.")
 
     def _write_marker(self):
+        if self._corrected_destination:
+            destination = self._corrected_destination
+        else:
+            destination = self._destination
         try:
-            extract_barcode(self._destination)
+
+            extract_barcode(destination)
         except ValueError:
+            log.error("No barcode found. N marker file will be created.")
             return
-        parent_dir = os.path.dirname(self._destination)
+        parent_dir = os.path.dirname(destination)
         marker_file = os.path.join(parent_dir, FINISHED_MARKER +
-                                   os.path.basename(self._destination))
+                                   os.path.basename(destination))
         try:
             with open(marker_file, 'x') as fh:
                 log.info("Create marker file: {}".format(marker_file))
