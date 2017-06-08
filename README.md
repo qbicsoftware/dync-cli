@@ -92,6 +92,20 @@ To overwrite key-value pairs in the metadata use the `-k` switch:
 dync -k my_id:ABCDE -k sample:FOO <server-hostname> <filename>
 ```
 
+## Multiple file upload
+If you want to upload several files at once, the most easiest way is to use ```xargs``` (https://en.wikipedia.org/wiki/Xargs). For example, you have a directory with some pdf files you want to transfer:
+
+```
+ls | grep pdf | xargs -i dync <server.url> {}
+```
+It is as easy as that. If there is an existing rule on the server for handling PDF files of course. If you have kind of manual uploads, that do not match any rule, you can do so by entering your ID like ```myID``` and can use the ```passthrough``` keyword:
+
+```
+ls | grep pdf | xargs -i dync -k passthrough:myID <server.url> {}
+```
+The files will then be dropped in a dedicated directory for your account only. Of course your public key must be known to the server and the ID match the correct public key, otherwise the transfer will fail.
+
+
 dync does not support directory uploads, but you can use tar to
 bundle the contents into an archive first. In this case you need
 to explicitly set the remote filename with `-n`:
@@ -99,6 +113,8 @@ to explicitly set the remote filename with `-n`:
 ```
 tar -c <dir> | dync -n <filename-on-server.tar> <server>
 ```
+
+
 
 for more information see `dync -h`.
 
