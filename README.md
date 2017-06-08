@@ -92,6 +92,18 @@ To overwrite key-value pairs in the metadata use the `-k` switch:
 dync -k my_id:ABCDE -k sample:FOO <server-hostname> <filename>
 ```
 
+## Targeted file upload
+Normally, the dync server instance looks for a matching rule, when data arrives from valid clients and thus determines the proper destination on the server. But sometimes, you might not want that and just upload the files (maybe the files need some manual intervention first, from am PI on the server's host location). 
+
+In this case you can use the ```passthrough``` keyword like:
+
+```
+dync -k passthrough:myID <server-hostname> <filename>
+```
+
+The files will be dropped in a dedicated directory on the server, that matches the client ID.
+
+
 ## Multiple file upload
 If you want to upload several files at once, the most easiest way is to use ```xargs``` (https://en.wikipedia.org/wiki/Xargs). For example, you have a directory with some pdf files you want to transfer:
 
@@ -106,7 +118,8 @@ ls | grep pdf | xargs -i dync -k passthrough:myID <server.url> {}
 The files will then be dropped in a dedicated directory for your account only. Of course your public key must be known to the server and the ID match the correct public key, otherwise the transfer will fail.
 
 
-dync does not support directory uploads, but you can use tar to
+## Directory upload
+Dync does not support directory uploads, but you can use ```tar``` (https://www.gnu.org/software/tar/) to
 bundle the contents into an archive first. In this case you need
 to explicitly set the remote filename with `-n`:
 
@@ -114,7 +127,15 @@ to explicitly set the remote filename with `-n`:
 tar -c <dir> | dync -n <filename-on-server.tar> <server>
 ```
 
+In this case, the archive will be not extracted automatically on the server.
 
+However, if you want to do that, you can use the ```untar``` keyword:
+
+```
+tar -c <dir> | dync -n <filename-on-server.tar> -k untar:True <server>
+```
+
+This is currently restricted to a maximum archive member size of 10 files, in order to prevent the server from beeing busy with extracting only.
 
 for more information see `dync -h`.
 
