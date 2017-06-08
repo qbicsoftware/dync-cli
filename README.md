@@ -159,6 +159,12 @@ done <$FILE_LIST
 exit $rc
 ```
 
+Then you can just call the script like:
+
+```
+./scriptname.sh file_list.txt
+```
+
 
 ## Directory upload
 Dync does not support directory uploads, but you can use ```tar``` (https://www.gnu.org/software/tar/) to
