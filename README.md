@@ -117,6 +117,48 @@ ls | grep pdf | xargs -i dync -k passthrough:myID <server.url> {}
 ```
 The files will then be dropped in a dedicated directory for your account only. Of course your public key must be known to the server and the ID match the correct public key, otherwise the transfer will fail.
 
+### Upload from a list of files
+Let's assume you have a text file with a list of paths:
+
+```
+/path/to/file1
+/path/to/file2
+/path/to/file3
+```
+
+The you can do the same magic as before:
+
+```
+cat file_with_paths.txt | xargs -i dync -k passthrough:myID <server.url> {}
+```
+
+Or, if you want it more verbose for logging, you can use a bash script:
+
+```
+#!/bin/bash
+
+# set the dync server url
+SERVER_URL=the.url.de
+
+rc=$?
+
+if [ "$1" == ""  ]; then
+       echo "You need to provide the path to the file list"
+       rc=1
+       exit $rc
+fi
+
+FILE_LIST=$1
+
+echo "Initiating upload with dync ..."
+
+while read p; do
+        echo "Transfer of $p starts ..."
+        dync -k passthrough:myID "$SERVER_URL" "$p"
+done <$FILE_LIST
+exit $rc
+```
+
 
 ## Directory upload
 Dync does not support directory uploads, but you can use ```tar``` (https://www.gnu.org/software/tar/) to
