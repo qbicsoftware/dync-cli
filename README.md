@@ -93,7 +93,7 @@ dync -k my_id:ABCDE -k sample:FOO <server-hostname> <filename>
 ```
 
 ## Targeted file upload
-Normally, the dync server instance looks for a matching rule, when data arrives from valid clients and thus determines the proper destination on the server. But sometimes, you might not want that and just upload the files (maybe the files need some manual intervention first, from am PI on the server's host location). 
+Normally, the dync server instance looks for a matching rule, when data arrives from valid clients and thus determines the proper destination on the server. But sometimes, you might not want that and just upload the files (maybe the files need some manual intervention first, from an PI on the server's host location). 
 
 In this case you can use the ```passthrough``` keyword like:
 
