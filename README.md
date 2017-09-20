@@ -35,21 +35,30 @@ data from labs to our servers.
 `dync` is named after Dynein, a motor protein that moves vesicles and
 other cargo in cells.
 
+# Firewall requirements
+
+Dync binds by default port 8889 for the TCP-based data transfer. Make sure to create a proper firewall rule, in order to let dync bind this port. For **server administrators**: you can always change the default port in the configuration file, by modifiying line ``address: "tcp://*:8889"`` and restart the server. Make sure to inform your clients, they have to change the port with the argument ``--port xxxx`` so the transfer can work.
+
 # Installation
 
-You can use pip to install both the client and the server
-(TODO, not uploaded yet):
+You can use pip to install both the client and the server. Dync is designed to run under **Python >= 3.3**.
 
+## Pip for installation
+Please make sure that you have **pip** for **Python 3.x** installed on your system, otherwise you will install it in your Python 2.7 environment, and execution will fail.
+
+Please use the development version for the moment, until we make the first official release.
+
+Future **official** version
 ```
 pip install dync
 ```
 
-or for the development version
+The **development** version
 ```
 pip install git+https://github.com/qbicsoftware/dync
 ```
 
-To get a progress bar on the client you also need to install `tqdm`.
+To get a **progress bar** (optional) on the client you also need to install `tqdm`.
 
 # Client usage
 
