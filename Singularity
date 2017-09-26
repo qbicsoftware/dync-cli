@@ -9,8 +9,12 @@ From:centos:7
     DESCRIPTION Python software with TCP-based data transfer using zeroMQ
     LICENSE GPL2+
 
+%runscript
+    echo "Starting dync through Singularity o.O"
+    exec dync "$@"
+
 %setup 
-    
+
 %post
     yum -y install epel-release
     yum -y install python34 python34-pip git
@@ -19,4 +23,5 @@ From:centos:7
 
 %test
     python3 --version
-    dync 
+    dync -h
+    
