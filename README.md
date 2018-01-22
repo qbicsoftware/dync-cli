@@ -44,7 +44,7 @@ Dync binds by default port 8889 for the TCP-based data transfer. Make sure to cr
 You can use pip to install both the client and the server. Dync is designed to run under **Python >= 3.3**.
 
 ## Pip for installation
-Please make sure that you have **pip** for **Python 3.x** installed on your system, otherwise you will install it in your Python 2.7 environment, and execution will fail.
+Please make sure that you have **pip** for **Python 3.x** installed on your system, otherwise you will install it in your Python 2.7 environment, and execution will fail. Also make sure, that you install **Git** on your system, otherwise the installation of the development version will not work either. 
 
 Please use the development version for the moment, until we make the first official release.
 
