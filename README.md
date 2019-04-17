@@ -119,6 +119,11 @@ If you want to upload several files at once, the most easiest way is to use ```x
 ```
 ls | grep pdf | xargs -i dync <server.url> {}
 ```
+Or, for Mac OS X users:
+```
+ls | grep raw | xargs -I F dync <server.url> "F"
+```
+
 It is as easy as that. If there is an existing rule on the server for handling PDF files of course. If you have kind of manual uploads, that do not match any rule, you can do so by entering your ID like ```myID``` and can use the ```passthrough``` keyword:
 
 ```
@@ -135,7 +140,7 @@ Let's assume you have a text file with a list of paths:
 /path/to/file3
 ```
 
-The you can do the same magic as before:
+Then you can do the same magic as before:
 
 ```
 cat file_with_paths.txt | xargs -i dync -k passthrough:myID <server.url> {}
