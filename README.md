@@ -2,8 +2,6 @@
 
 ![dync-logo](https://github.com/qbicsoftware/dync/blob/master/dync_logo.png)
 
-*This is work in progress!*
-
 `dync` and `dync-server` are programs that transfer files and metadata
 to a central server. It was written at QBiC to send raw scientific
 data from labs to our servers.
