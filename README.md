@@ -201,6 +201,26 @@ for more information see `dync -h`.
 
 # Server usage
 
+## Add a user
+
+to add a user just go to the home folder of the user which is running the dync server.
+Change into the .dync/clients folder there an add the public key of the new user.
+The key should look like this:
+```
+#   ****  Generated on date by pyzmq  ****
+#   ZeroMQ CURVE Public Certificate
+#   Exchange securely, or use a secure mechanism to verify the contents
+#   of this file after exchange. Store public certificates in your home
+#   directory, in the .curve subdirectory.
+
+metadata
+curve
+    user_id = "user"
+    public-key = "superfancykey"
+
+```
+
+
 ## Certificates
 
 ## Customize server side file storage
