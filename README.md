@@ -77,9 +77,10 @@ chmod 700 ~/.dync
 chmod 600 ~/.dync/client.key_secret
 ```
 
-Store the server certificate in `~/.dync/server.key` (TODO we should
-do this more like ssh and allow different server keys for different
-destinations)
+Get the public key from the dync server: `server.key` from your admin,
+and store the server certificate in `~/.dync/server.key` 
+(TODO we should do this more like ssh and allow different server keys
+for different destinations)
 
 Once the server admin approved your keys you can upload files:
 
