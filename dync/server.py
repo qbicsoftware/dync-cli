@@ -103,7 +103,7 @@ class Upload:
         return msg.is_last, returned_credit
 
     def _handle_error(self, msg):
-        log.warn("Got remote error with code %s and message %s",
+        log.error("Got remote error with code %s and message %s",
                  msg.code, msg.msg)
         self._silent_cancel()
         return True, self._credit
