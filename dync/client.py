@@ -6,6 +6,7 @@ import os
 import sys
 import logging
 import uuid
+import time
 
 import zmq
 import zmq.auth
@@ -162,7 +163,10 @@ class Upload:
                 self.send_chunks()
         except (KeyboardInterrupt, SystemExit):
             self._conn.send_error(400, "Client shutting down")
+            time.sleep(5)
             raise
+        except (Exception):
+            log.error("Unexptected")
 
     def _recv_server_status(self):
         for _ in range(RETRIES):
