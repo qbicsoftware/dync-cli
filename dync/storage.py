@@ -210,9 +210,9 @@ class UploadFile:
         except Exception:
             pass
         try:
-            os.rmdir(self._tmpdir)
+            shutil.rmtree(self._tmpdir)
         except Exception:
-            pass
+            log.error("Temporary directory {} could not be removed.".format(self._tmpdir))
         self._storage._remove_file(self)
 
     def abort(self):
