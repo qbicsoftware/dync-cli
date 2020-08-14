@@ -100,18 +100,6 @@ To overwrite key-value pairs in the metadata use the `-k` switch:
 dync -k my_id:ABCDE -k sample:FOO <server-hostname> <filename>
 ```
 
-## Targeted file upload
-Normally, the dync server instance looks for a matching rule, when data arrives from valid clients and thus determines the proper destination on the server. But sometimes, you might not want that and just upload the files (maybe the files need some manual intervention first, from an PI on the server's host location). 
-
-In this case you can use the ```passthrough``` keyword like:
-
-```
-dync -k passthrough:myID <server-hostname> <filename>
-```
-
-The files will be dropped in a dedicated directory on the server, that matches the client ID.
-
-
 ## Multiple file upload
 If you want to upload several files at once, the most easiest way is to use ```xargs``` (https://en.wikipedia.org/wiki/Xargs). For example, you have a directory with some pdf files you want to transfer:
 
@@ -122,13 +110,6 @@ Or, for Mac OS X users:
 ```
 ls | grep raw | xargs -I F dync <server.url> "F"
 ```
-
-It is as easy as that. If there is an existing rule on the server for handling PDF files of course. If you have kind of manual uploads, that do not match any rule, you can do so by entering your ID like ```myID``` and can use the ```passthrough``` keyword:
-
-```
-ls | grep pdf | xargs -i dync -k passthrough:myID <server.url> {}
-```
-The files will then be dropped in a dedicated directory for your account only. Of course your public key must be known to the server and the ID match the correct public key, otherwise the transfer will fail.
 
 ### Upload from a list of files
 Let's assume you have a text file with a list of paths:
