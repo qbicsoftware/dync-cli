@@ -81,6 +81,7 @@ Get the public key from the dync server: `server.key` from your admin,
 and store the server certificate in `~/.dync/server.key` 
 (TODO we should do this more like ssh and allow different server keys
 for different destinations)
+For submitting data to QBiC, you can use the [public server key](./server.key) provided in this repository.
 
 Once the server admin approved your keys you can upload files:
 
