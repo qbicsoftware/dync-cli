@@ -148,7 +148,7 @@ echo "Initiating upload with dync ..."
 
 while read p; do
         echo "Transfer of $p starts ..."
-        dync -k passthrough:myID "$SERVER_URL" "$p"
+        dync "$SERVER_URL" "$p"
 done <$FILE_LIST
 exit $rc
 ```
