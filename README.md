@@ -123,7 +123,7 @@ Let's assume you have a text file with a list of paths:
 Then you can do the same magic as before:
 
 ```
-cat file_with_paths.txt | xargs -i dync -k passthrough:myID <server.url> {}
+cat file_with_paths.txt | xargs -i dync <server.url> {}
 ```
 
 Or, if you want it more verbose for logging, you can use a bash script:
