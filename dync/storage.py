@@ -333,12 +333,7 @@ class UploadFile:
             destination = self._corrected_destination
         else:
             destination = self._destination
-        try:
 
-            extract_barcode(destination)
-        except ValueError:
-            log.error("No barcode found. N marker file will be created.")
-            return
         parent_dir = os.path.dirname(destination)
         marker_file = os.path.join(parent_dir, FINISHED_MARKER +
                                    os.path.basename(destination))
