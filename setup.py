@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='dync',
-    version='1.0.2',
+    version='1.0.3',
     packages=['dync'],
     license='GPL2+',
     long_description=open('README.md').read(),
